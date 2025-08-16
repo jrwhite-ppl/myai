@@ -1,0 +1,61 @@
+{
+  "name": "Engineering Team",
+  "description": "Complete technical organization including development, infrastructure, and data",
+  "leader": "engineering_team_leader",
+  "agents": [
+    "engineering_team_leader",
+    "systems_architect",
+    "quality_assurance_engineer",
+    "lead_developer",
+    "devops_engineer",
+    "data_analyst",
+    "bi_developer"
+  ],
+  "workflows": {
+    "architecture_review": "agent_os/workflows/engineering_workflows.md#architecture-review-workflow",
+    "quality_assurance": "agent_os/workflows/engineering_workflows.md#quality-assurance-workflow",
+    "code_review": "agent_os/workflows/engineering_workflows.md#code-review-workflow",
+    "deployment": "agent_os/workflows/engineering_workflows.md#deployment-workflow",
+    "data_analysis": "agent_os/workflows/engineering_workflows.md#data-analysis-workflow"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run .myagents/hooks/pre_tool_use.py --validate-code"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run .myagents/hooks/post_tool_use.py --log-commands"
+          }
+        ]
+      }
+    ]
+  },
+  "standards": [
+    "agent-os-global/standards/best-practices.md",
+    "agent-os-global/standards/code-style/"
+  ],
+  "voice_triggers": {
+    "team": ["Hey Engineering", "Consult Tech Team"],
+    "leader": ["Hey Engineering Leader", "Consult CTO"],
+    "members": {
+      "systems_architect": ["Hey Architect", "Consult Systems"],
+      "quality_assurance_engineer": ["Hey QA", "Consult Quality"],
+      "lead_developer": ["Hey Lead", "Consult Dev"],
+      "devops_engineer": ["Hey DevOps", "Consult Ops"],
+      "data_analyst": ["Hey Data", "Consult Analytics"],
+      "bi_developer": ["Hey BI", "Consult Dashboards"]
+    }
+  }
+}

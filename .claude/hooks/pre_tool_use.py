@@ -1,0 +1,1 @@
+../../.myagents/hooks/pre_tool_use.py

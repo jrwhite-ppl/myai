@@ -1,0 +1,57 @@
+{
+  "name": "Leadership Team",
+  "description": "Cross-team coordination and strategic operations",
+  "leader": "a_player_leader",
+  "agents": [
+    "a_player_leader",
+    "engineering_team_leader",
+    "marketing_team_leader",
+    "legal_team_leader",
+    "security_team_leader",
+    "finance_team_leader"
+  ],
+  "workflows": {
+    "strategic_planning": "agent_os/instructions/core/plan-product.md",
+    "cross_team_coordination": "team_dynamics/inter_team_protocols.md",
+    "escalation_management": "team_dynamics/escalation_paths.md",
+    "knowledge_sharing": "team_dynamics/knowledge_sharing.md"
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run .myagents/hooks/session_start.py --load-leadership-context"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run .myagents/hooks/stop.py --leadership-summary"
+          }
+        ]
+      }
+    ]
+  },
+  "standards": [
+    "agent_os/standards/decision_frameworks.md",
+    "team_dynamics/inter_team_protocols.md",
+    "team_dynamics/escalation_paths.md"
+  ],
+  "voice_triggers": {
+    "team": ["Hey Leadership", "Consult Leaders"],
+    "leader": ["Hey Leader", "Consult Strategy"],
+    "members": {
+      "engineering_team_leader": ["Hey Engineering Leader", "Consult Engineering Strategy"],
+      "marketing_team_leader": ["Hey Marketing Leader", "Consult Marketing Strategy"],
+      "legal_team_leader": ["Hey Legal Leader", "Consult Legal Strategy"],
+      "security_team_leader": ["Hey Security Leader", "Consult Security Strategy"],
+      "finance_team_leader": ["Hey Finance Leader", "Consult Finance Strategy"]
+    }
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "name": "Finance Team",
+  "description": "Financial strategy, tax, grants, and fundraising",
+  "leader": "finance_team_leader",
+  "agents": [
+    "finance_team_leader",
+    "chief_financial_officer",
+    "finance_specialist"
+  ],
+  "workflows": {
+    "financial_planning": "agent_os/workflows/finance_workflows.md#financial-planning-and-analysis-workflow",
+    "fundraising": "agent_os/workflows/finance_workflows.md#fundraising-workflow",
+    "tax_planning": "agent_os/workflows/finance_workflows.md#tax-planning-workflow",
+    "grant_management": "agent_os/workflows/finance_workflows.md#grant-management-workflow"
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run .myagents/hooks/user_prompt_submit.py --add-financial-context"
+          }
+        ]
+      }
+    ]
+  },
+  "standards": [
+    "agent_os/workflows/finance_workflows.md",
+    "agent_os/standards/decision_frameworks.md"
+  ],
+  "voice_triggers": {
+    "team": ["Hey Finance", "Consult Finance Team"],
+    "leader": ["Hey Finance Leader", "Consult Finance Strategy"],
+    "members": {
+      "chief_financial_officer": ["Hey CFO", "Consult Finance"],
+      "finance_specialist": ["Hey Finance", "Consult Tax"]
+    }
+  }
+}

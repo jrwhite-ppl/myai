@@ -1,0 +1,1 @@
+../../.myagents/agents/legal_team_leader.md

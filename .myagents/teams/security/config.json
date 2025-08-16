@@ -1,0 +1,51 @@
+{
+  "name": "Security Team",
+  "description": "Security strategy, threat analysis, and compliance",
+  "leader": "security_team_leader",
+  "agents": [
+    "security_team_leader",
+    "chief_security_officer",
+    "security_analyst"
+  ],
+  "workflows": {
+    "security_assessment": "agent_os/workflows/security_workflows.md#security-governance-workflow",
+    "incident_response": "agent_os/workflows/security_workflows.md#incident-response-workflow",
+    "threat_analysis": "agent_os/workflows/security_workflows.md#threat-analysis-workflow"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Execute",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run .myagents/hooks/pre_tool_use.py --security-validation"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run .myagents/hooks/post_tool_use.py --security-audit"
+          }
+        ]
+      }
+    ]
+  },
+  "standards": [
+    "agent_os/workflows/security_workflows.md",
+    "agent_os/standards/decision_frameworks.md"
+  ],
+  "voice_triggers": {
+    "team": ["Hey Security", "Consult Security Team"],
+    "leader": ["Hey Security Leader", "Consult Security Strategy"],
+    "members": {
+      "chief_security_officer": ["Hey Security", "Consult CSO"],
+      "security_analyst": ["Hey Analyst", "Consult SecOps"]
+    }
+  }
+}

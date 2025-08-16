@@ -1,0 +1,146 @@
+{
+  "version": "1.0.0",
+  "name": "MyAgents Unified AI Configuration",
+  "description": "Comprehensive multi-agent system with hooks and workflows",
+  "extends": [],
+  "agents": {
+    "enabled": ["*"],
+    "disabled": [],
+    "path": ".myagents/agents/",
+    "raw_output_protocol": true
+  },
+  "hooks": {
+    "enabled": true,
+    "path": ".myagents/hooks/",
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run .myagents/hooks/user_prompt_submit.py --log-only"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run .myagents/hooks/pre_tool_use.py"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run .myagents/hooks/post_tool_use.py"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run .myagents/hooks/session_start.py"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run .myagents/hooks/stop.py"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run .myagents/hooks/subagent_stop.py"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run .myagents/hooks/notification.py"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run .myagents/hooks/pre_compact.py"
+          }
+        ]
+      }
+    ]
+  },
+  "teams": {
+    "available": ["engineering", "marketing", "legal", "security", "finance", "leadership"],
+    "active": ["engineering", "marketing"],
+    "configs": ".myagents/teams/"
+  },
+  "workflows": {
+    "provider": "agent-os",
+    "global_path": "~/.agent-os/",
+    "local_path": ".agent-os/",
+    "custom_path": ".myagents/workflows/"
+  },
+  "voice": {
+    "enabled": true,
+    "whisper": {
+      "provider": "openai",
+      "model": "whisper-1"
+    },
+    "tts": {
+      "provider": "elevenlabs",
+      "fallback": ["openai", "pyttsx3"]
+    },
+    "trigger_prefix": "Hey",
+    "raw_output": true
+  },
+  "integrations": {
+    "claude_code": {
+      "enabled": true,
+      "settings_path": ".claude/settings.json",
+      "agents_path": ".claude/agents/",
+      "hooks_path": ".claude/hooks/"
+    },
+    "cursor": {
+      "enabled": true,
+      "rules_path": ".cursorrules",
+      "generate_from_teams": true
+    },
+    "agent_os": {
+      "enabled": true,
+      "global_link": "agent-os-global",
+      "local_path": ".agent-os/"
+    }
+  },
+  "logging": {
+    "enabled": true,
+    "path": "logs/",
+    "level": "info",
+    "format": "json"
+  }
+}

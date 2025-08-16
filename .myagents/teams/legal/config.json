@@ -1,0 +1,40 @@
+{
+  "name": "Legal Team",
+  "description": "Legal expertise for contracts, compliance, and risk management",
+  "leader": "legal_team_leader",
+  "agents": [
+    "legal_team_leader",
+    "senior_legal_advisor",
+    "contract_specialist"
+  ],
+  "workflows": {
+    "contract_review": "agent_os/workflows/legal_workflows.md#contract-review-workflow",
+    "compliance_assessment": "agent_os/workflows/legal_workflows.md#compliance-assessment-workflow",
+    "risk_analysis": "agent_os/workflows/legal_workflows.md#risk-analysis-workflow"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run .myagents/hooks/pre_tool_use.py --check-legal-compliance"
+          }
+        ]
+      }
+    ]
+  },
+  "standards": [
+    "agent_os/standards/decision_frameworks.md",
+    "agent_os/standards/collaboration_protocols.md"
+  ],
+  "voice_triggers": {
+    "team": ["Hey Legal", "Consult Legal Team"],
+    "leader": ["Hey Legal Leader", "Consult Legal Strategy"],
+    "members": {
+      "senior_legal_advisor": ["Hey Legal", "Consult Counselor"],
+      "contract_specialist": ["Hey Contracts", "Consult Drafter"]
+    }
+  }
+}

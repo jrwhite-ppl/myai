@@ -1,0 +1,55 @@
+{
+  "name": "Marketing & Customer Success Team",
+  "description": "Complete customer-facing organization including marketing, sales, and customer success",
+  "leader": "marketing_team_leader",
+  "agents": [
+    "marketing_team_leader",
+    "brand_strategist",
+    "content_creator",
+    "customer_success_manager",
+    "customer_support_specialist"
+  ],
+  "workflows": {
+    "brand_strategy": "agent_os/workflows/marketing_workflows.md#brand-strategy-development-workflow",
+    "content_creation": "agent_os/workflows/marketing_workflows.md#content-creation-workflow",
+    "customer_onboarding": "agent_os/workflows/marketing_workflows.md#customer-onboarding-workflow",
+    "support_escalation": "agent_os/workflows/marketing_workflows.md#support-escalation-workflow"
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run .myagents/hooks/user_prompt_submit.py --add-customer-context"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "WebSearch|WebFetch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run .myagents/hooks/post_tool_use.py --analyze-market-data"
+          }
+        ]
+      }
+    ]
+  },
+  "standards": [
+    "agent_os/standards/communication_standards.md",
+    "agent_os/standards/collaboration_protocols.md"
+  ],
+  "voice_triggers": {
+    "team": ["Hey Marketing", "Consult Customer Team"],
+    "leader": ["Hey Marketing Leader", "Consult CRO"],
+    "members": {
+      "brand_strategist": ["Hey Brand", "Consult Strategy"],
+      "content_creator": ["Hey Content", "Consult Creator"],
+      "customer_success_manager": ["Hey Success", "Consult Customer"],
+      "customer_support_specialist": ["Hey Support", "Consult Service"]
+    }
+  }
+}

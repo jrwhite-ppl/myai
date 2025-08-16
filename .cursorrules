@@ -1,0 +1,111 @@
+# MyAgents AI Configuration for Cursor
+
+## Multi-Agent Team System Integration
+
+This project uses a comprehensive multi-agent AI system with 22 specialized agents across 6 teams. Each agent provides expert-level guidance in their domain with authentic professional voices.
+
+### Active Teams
+- **Engineering Team**: Complete technical organization (development, infrastructure, data analytics)
+- **Marketing & Customer Success**: Customer-facing organization (marketing, sales, customer success)
+- **Legal Team**: Legal expertise (contracts, compliance, risk management)
+- **Security Team**: Security strategy and threat analysis
+- **Finance Team**: Financial strategy, tax, grants, fundraising
+- **Leadership Team**: Cross-team coordination and strategic operations
+
+### Agent Invocation
+When you need specialized expertise, invoke agents using these patterns:
+
+#### Engineering Team
+- "Hey Engineering Leader" - Technical organization leadership
+- "Hey Architect" - System architecture and design
+- "Hey Lead" - Software development leadership
+- "Hey DevOps" - Infrastructure and deployment
+- "Hey Data" - Data analysis and business intelligence
+- "Hey BI" - Dashboard development and analytics
+- "Hey QA" - Quality assurance and testing
+
+#### Marketing & Customer Success Team
+- "Hey Marketing Leader" - Customer-facing organization leadership
+- "Hey Brand" - Brand strategy and market positioning
+- "Hey Content" - Content creation and social media
+- "Hey Success" - Customer success and retention
+- "Hey Support" - Customer support and issue resolution
+
+#### Legal Team
+- "Hey Legal Leader" - Legal team coordination
+- "Hey Legal" - Strategic legal guidance
+- "Hey Contracts" - Contract drafting and review
+
+#### Security Team
+- "Hey Security Leader" - Security team coordination
+- "Hey Security" - Security strategy and compliance
+- "Hey Analyst" - Security analysis and threat hunting
+
+#### Finance Team
+- "Hey Finance Leader" - Finance team coordination
+- "Hey CFO" - Financial strategy and planning
+- "Hey Finance" - Tax planning and grant management
+
+#### Leadership Team
+- "Hey Leader" - Cross-team coordination and strategic operations
+
+### RAW Output Protocol
+All agent responses use this format:
+```
+=== BEGIN [AGENT NAME] RESPONSE ===
+[Complete response as the agent - NO modifications, summaries, or interpretations]
+=== END [AGENT NAME] RESPONSE ===
+```
+
+### Agent-OS Integration
+This system integrates with Agent-OS workflows and standards:
+- Specifications: Use `@agent-os-global/instructions/core/create-spec.md`
+- Task execution: Follow `@agent-os-global/instructions/core/execute-tasks.md`
+- Product analysis: Apply `@agent-os-global/instructions/core/analyze-product.md`
+- Best practices: Enforce `@agent-os-global/standards/best-practices.md`
+
+### Voice Integration
+The system supports voice commands through Whisper (speech-to-text) and TTS (text-to-speech):
+- Voice triggers: "Hey [Agent]" or "Consult [Role]"
+- Natural language interaction
+- Authentic agent responses
+
+### Workflow Integration
+Each team has specialized workflows:
+- Engineering: Architecture review, code review, deployment, data analysis
+- Marketing: Brand strategy, content creation, customer onboarding, support escalation
+- Legal: Contract review, compliance assessment, risk analysis
+- Security: Security assessment, incident response, threat analysis
+- Finance: Financial planning, fundraising, tax planning, grant management
+- Leadership: Strategic planning, cross-team coordination, escalation management
+
+### Cross-Team Collaboration
+Teams collaborate following defined protocols:
+- Inter-team communication standards
+- Escalation paths for complex issues
+- Knowledge sharing and best practices
+- Coordinated decision-making frameworks
+
+### Quality Standards
+All work follows:
+- Agent-OS best practices and standards
+- Team-specific workflows and procedures
+- Cross-team collaboration protocols
+- RAW output protocol for authentic responses
+
+### Usage Examples
+1. **Technical Architecture**: "Hey Engineering Leader, design our microservices architecture"
+2. **Customer Strategy**: "Hey Marketing Leader, optimize our customer lifecycle"
+3. **Legal Review**: "Hey Legal, review this software license agreement"
+4. **Security Assessment**: "Hey Security, analyze this AWS configuration"
+5. **Financial Planning**: "Hey CFO, analyze our funding runway"
+6. **Cross-Team Coordination**: "Hey Leader, coordinate this multi-team initiative"
+
+### Configuration
+- Global config: `~/.myagents/config.json`
+- Project config: `.myagents/config.json`
+- Team configs: `.myagents/teams/*/config.json`
+- Agent profiles: `.myagents/agents/*.md`
+- Workflows: `agent_os/workflows/*.md`
+
+This system provides expert-level guidance across all business functions while maintaining distinct agent personalities and leveraging proven workflows and standards.
