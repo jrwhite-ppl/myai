@@ -1,292 +1,187 @@
-# MyAgents - Unified AI Configuration System
+# MyAI - Unified AI Configuration Management CLI
 
-A comprehensive multi-agent AI system that unifies specialized teams, hooks, and workflows for AI development tools like Claude Code and Cursor.
+MyAI is a powerful command-line tool that centralizes and streamlines AI configuration management across multiple AI-powered development tools. It serves as a single source of truth for managing AI assistant configurations, agents, and integrations while maintaining compatibility with existing tools like Claude Code, Cursor, and future AI development assistants.
 
-## 🎯 Overview
+## 🚀 Key Features
 
-MyAgents provides a hierarchical configuration system that brings together:
-- **22 Specialized Agents** across 6 teams (Engineering, Marketing, Legal, Security, Finance, Leadership)
-- **Claude Code Hooks** for deterministic control and security
-- **Agent-OS Workflows** for proven development methodologies
-- **Voice Integration** with Whisper and TTS
-- **Cross-Tool Compatibility** (Claude Code, Cursor, and more)
-
-## 🏗️ Architecture
-
-```
-~/.myagents/                    # Global configurations
-├── agents/                     # Global agent definitions
-├── hooks/                      # Global hook scripts
-├── workflows/                  # Global workflows
-└── config.json                 # Global settings
-
-/project/.myagents/             # Project configurations  
-├── agents/                     # Project-specific agents
-├── hooks/                      # Project-specific hooks
-├── teams/                      # Team configurations
-│   ├── engineering/
-│   ├── marketing/
-│   ├── legal/
-│   ├── security/
-│   ├── finance/
-│   └── leadership/
-└── config.json                 # Project settings
-```
-
-## 🚀 Quick Start
-
-### 1. Voice Commands
-```bash
-# Engineering Team
-"Hey Engineering Leader, design our microservices architecture"
-"Hey Data, analyze our customer retention metrics"
-"Hey DevOps, optimize our deployment pipeline"
-
-# Marketing Team  
-"Hey Marketing Leader, optimize our customer lifecycle"
-"Hey Success, improve our onboarding process"
-"Hey Support, resolve this customer issue"
-
-# Legal Team
-"Hey Legal, review this software license"
-"Hey Contracts, draft an NDA"
-
-# Security Team
-"Hey Security, analyze this AWS configuration"
-"Hey Analyst, investigate this security alert"
-
-# Finance Team
-"Hey CFO, analyze our funding runway"
-"Hey Finance, optimize our R&D tax credits"
-
-# Leadership
-"Hey Leader, coordinate this cross-team initiative"
-```
-
-### 2. Agent Invocation
-Each agent responds with authentic professional expertise using the RAW output protocol:
-
-```
-=== BEGIN ENGINEERING TEAM LEADER RESPONSE ===
-[Complete response as the Engineering Leader - NO modifications]
-=== END ENGINEERING TEAM LEADER RESPONSE ===
-```
-
-## 🎭 Agent Teams
-
-### Engineering Team (7 agents)
-- **Engineering Team Leader** - Technical organization leadership
-- **Systems Architect** - Architecture and design
-- **Lead Developer** - Software development leadership  
-- **DevOps Engineer** - Infrastructure and deployment
-- **Data Analyst** - Business intelligence and analytics
-- **BI Developer** - Dashboard development
-- **QA Engineer** - Quality assurance and testing
-
-### Marketing & Customer Success Team (5 agents)
-- **Marketing Team Leader** - Customer-facing organization leadership
-- **Brand Strategist** - Brand strategy and positioning
-- **Content Creator** - Content creation and social media
-- **Customer Success Manager** - Customer success and retention
-- **Customer Support Specialist** - Support and issue resolution
-
-### Legal Team (3 agents)
-- **Legal Team Leader** - Legal team coordination
-- **Senior Legal Advisor** - Strategic legal guidance
-- **Contract Specialist** - Contract drafting and review
-
-### Security Team (3 agents)
-- **Security Team Leader** - Security team coordination
-- **Chief Security Officer** - Security strategy and compliance
-- **Security Analyst** - Security analysis and threat hunting
-
-### Finance Team (3 agents)
-- **Finance Team Leader** - Finance team coordination
-- **Chief Financial Officer** - Financial strategy and planning
-- **Finance Specialist** - Tax planning and grant management
-
-### Leadership Team (1 agent)
-- **A-Player Department Leader** - Cross-team coordination and strategic operations
-
-## 🔧 Configuration
-
-### Project Configuration
-```json
-{
-  "version": "1.0.0",
-  "teams": {
-    "active": ["engineering", "marketing"],
-    "configs": ".myagents/teams/"
-  },
-  "voice": {
-    "enabled": true,
-    "trigger_prefix": "Hey",
-    "tts_provider": "elevenlabs"
-  },
-  "integrations": {
-    "claude_code": {
-      "enabled": true,
-      "settings_path": ".claude/settings.json"
-    },
-    "cursor": {
-      "enabled": true,
-      "rules_path": ".cursorrules"
-    }
-  }
-}
-```
-
-### Team Configuration
-Each team has its own configuration with:
-- Agent definitions
-- Workflow mappings
-- Hook configurations
-- Voice triggers
-- Standards references
-
-## 🔗 Integrations
-
-### Claude Code Integration
-- Hooks automatically loaded from `.myagents/hooks/`
-- Agents available as sub-agents via `.claude/agents/`
-- Settings generated from `.myagents/config.json`
-
-### Cursor Integration
-- `.cursorrules` generated from active configurations
-- Team-specific prompts and contexts
-- Automatic workflow integration
-
-### Agent-OS Integration
-- Workflows referenced from `~/.agent-os/`
-- Specifications created in `.agent-os/specs/`
-- Standards enforced via hooks
-
-## 🎤 Voice Integration
-
-### Setup
-1. **Whisper** for speech-to-text
-2. **TTS Provider** (ElevenLabs, OpenAI, pyttsx3)
-3. **Voice Triggers** - "Hey [Agent]" or "Consult [Role]"
-
-### Usage
-```bash
-# Speak to Whisper: "Hey Engineering Leader, design our API"
-# Paste transcribed text into Claude Code
-# Receive authentic agent response
-# Optional: Use TTS to hear response
-```
-
-## 🔒 Security & Hooks
-
-### Hook Lifecycle
-- **UserPromptSubmit** - Prompt validation and context injection
-- **PreToolUse** - Security validation and command blocking
-- **PostToolUse** - Result validation and logging
-- **SessionStart** - Context loading and initialization
-- **Stop** - Completion validation and cleanup
-- **SubagentStop** - Sub-agent completion handling
-- **Notification** - User alerts and TTS
-- **PreCompact** - Transcript backup and preservation
-
-### Security Features
-- Dangerous command blocking (`rm -rf`, system access)
-- Sensitive file access prevention
-- Audit logging of all interactions
-- Permission-based tool access control
-
-## 📋 Workflows
-
-### Engineering Workflows
-- Architecture review and design
-- Code review and quality assurance
-- Deployment and infrastructure
-- Data analysis and business intelligence
-
-### Marketing Workflows
-- Brand strategy development
-- Content creation and campaigns
-- Customer onboarding and success
-- Support escalation and resolution
-
-### Legal Workflows
-- Contract review and drafting
-- Compliance assessment
-- Risk analysis and mitigation
-
-### Security Workflows
-- Security assessment and governance
-- Incident response and analysis
-- Threat hunting and monitoring
-
-### Finance Workflows
-- Financial planning and analysis
-- Fundraising and investor relations
-- Tax planning and optimization
-- Grant management and compliance
-
-### Leadership Workflows
-- Strategic planning and coordination
-- Cross-team collaboration
-- Escalation management
-- Knowledge sharing and best practices
-
-## 🛠️ Development
-
-### Adding New Agents
-1. Create agent profile in `.myagents/agents/`
-2. Add to team configuration in `.myagents/teams/[team]/config.json`
-3. Define voice triggers and workflows
-4. Update main configuration if needed
-
-### Adding New Hooks
-1. Create hook script in `.myagents/hooks/`
-2. Configure in `.myagents/config.json`
-3. Test with Claude Code session
-4. Add to team-specific configurations if needed
-
-### Adding New Teams
-1. Create team directory in `.myagents/teams/`
-2. Define team configuration with agents and workflows
-3. Add to available teams in main configuration
-4. Update documentation and examples
+- **Centralized Configuration**: Hierarchical configuration system supporting Enterprise, User, Team, and Project levels
+- **AI Agent Management**: Full lifecycle management of specialized AI assistants with CRUD operations
+- **Seamless Tool Integration**: Automatic synchronization with Claude Code, Cursor, and extensible to other tools
+- **Smart Conflict Resolution**: Intelligent merging strategies with both incremental and complete override options
+- **Beautiful CLI**: Built with Typer and Rich for an intuitive, visually appealing interface
+- **Enterprise Ready**: Security-first design with audit logging, compliance features, and policy enforcement
 
 ## 📚 Documentation
 
-- [AI Configuration Architecture](AI_CONFIGURATION_ARCHITECTURE.md) - Detailed system design
-- [Agent Profiles](.myagents/agents/) - Individual agent specifications
-- [Team Configurations](.myagents/teams/) - Team-specific settings
-- [Workflows](agent_os/workflows/) - Process definitions
-- [CLAUDE.md](CLAUDE.md) - Master instructions for Claude
+The complete specifications for MyAI are available in the [`specs/`](specs/) directory. Here's a guide to help you navigate:
 
-## 🎯 Benefits
+### Getting Started
+- **Project Overview** - Vision, objectives, and principles → [`specs/overview.md`](specs/overview.md)
+- **User Guide** - Quick start, common workflows, and best practices → [`specs/user-guide.md`](specs/user-guide.md)
+- **Installation & Setup** - Multiple installation methods and requirements → [`specs/installation-setup.md`](specs/installation-setup.md)
 
-1. **Unified Configuration** - Single source of truth for all AI tools
-2. **Team Collaboration** - Shared configurations per team
-3. **Hierarchical Control** - Override at any level
-4. **Tool Agnostic** - Works with Claude, Cursor, and more
-5. **Voice First** - Natural language interaction
-6. **Secure by Default** - Built-in validation and blocking
-7. **Workflow Driven** - Follows best practices automatically
-8. **Authentic Responses** - RAW output protocol preserves agent voices
+### Architecture & Design
+- **System Architecture** - Technical design and component structure → [`specs/architecture.md`](specs/architecture.md)
+- **CLI Interface** - Command structure and user interaction design → [`specs/cli-interface.md`](specs/cli-interface.md)
 
-## 🚀 Getting Started
+### Core Features
+- **Configuration Management** - Hierarchical config system with merge strategies → [`specs/configuration-management.md`](specs/configuration-management.md)
+  - [Configuration Hierarchy](specs/configuration-management.md#configuration-hierarchy)
+  - [Merge Strategies](specs/configuration-management.md#merge-strategies)
+  - [Conflict Resolution](specs/configuration-management.md#conflict-resolution)
 
-1. **Clone this repository**
-2. **Install dependencies**: `pip install uv`
-3. **Configure voice**: Set up Whisper and TTS providers
-4. **Activate teams**: Modify `.myagents/config.json`
-5. **Test with Claude Code**: Start a session and try voice commands
-6. **Customize**: Add your own agents, hooks, and workflows
+- **Agent Management** - AI agent lifecycle and operations → [`specs/agent-management.md`](specs/agent-management.md)
+  - [Agent Structure](specs/agent-management.md#agent-structure)
+  - [Agent Operations](specs/agent-management.md#agent-operations)
+  - [Agent Templates](specs/agent-management.md#agent-templates)
+
+### Integrations
+- **Tool Integrations** - Claude Code and Cursor adapters → [`specs/tool-integrations.md`](specs/tool-integrations.md)
+  - [Claude Code Integration](specs/tool-integrations.md#claude-code-integration)
+  - [Cursor Integration](specs/tool-integrations.md#cursor-integration)
+  - [Adding New Tools](specs/tool-integrations.md#future-tool-support)
+
+- **Agent-OS Integration** - Hidden dependency management → [`specs/agent-os-integration.md`](specs/agent-os-integration.md)
+  - [Integration Philosophy](specs/agent-os-integration.md#integration-philosophy)
+  - [Path Translation](specs/agent-os-integration.md#path-translation)
+  - [Update Management](specs/agent-os-integration.md#update-management)
+
+### Security & Enterprise
+- **Security** - Comprehensive security measures → [`specs/security.md`](specs/security.md)
+  - [File System Security](specs/security.md#file-system-security)
+  - [Sensitive Data Protection](specs/security.md#sensitive-data-protection)
+  - [Enterprise Security](specs/security.md#enterprise-security)
+
+## 🏗️ Architecture Overview
+
+MyAI follows a layered architecture pattern:
+
+```
+┌─────────────────────────────────────────┐
+│         CLI Interface (Typer + Rich)     │
+├─────────────────────────────────────────┤
+│         Configuration Manager            │
+├─────────────────────────────────────────┤
+│           Agent Manager                  │
+├─────────────────────────────────────────┤
+│        Integration Adapters              │
+│   (Claude, Cursor, Future Tools)         │
+├─────────────────────────────────────────┤
+│          Storage Layer                   │
+└─────────────────────────────────────────┘
+```
+
+For detailed architecture information, see [`specs/architecture.md`](specs/architecture.md).
+
+## 🔧 Configuration Hierarchy
+
+MyAI uses a powerful hierarchical configuration system:
+
+1. **Project Level** (`.myai/config.json`) - Highest priority
+2. **Team Level** (`~/.myai/config/teams/{team}.json`)
+3. **User Level** (`~/.myai/config/global.json`)
+4. **Enterprise Level** (`~/.myai/config/enterprise/{org}.json`)
+
+Learn more in [`specs/configuration-management.md`](specs/configuration-management.md#configuration-hierarchy).
+
+## 🤖 Agent System
+
+Agents are specialized AI personalities with specific expertise:
+
+- **Engineering**: Lead Developer, DevOps Engineer, QA Engineer
+- **Business**: Data Analyst, Finance Specialist, Product Manager
+- **Security**: Security Analyst, Chief Security Officer
+- **And many more...**
+
+Explore agent management in [`specs/agent-management.md`](specs/agent-management.md).
+
+## 🛠️ Quick Start
+
+```bash
+# Install MyAI
+pip install myai-cli
+
+# Run interactive setup
+myai init --mode guided
+
+# List available agents
+myai agent list
+
+# Enable agents for your project
+myai agent enable lead_developer security_analyst
+
+# Sync with your tools
+myai sync all
+```
+
+For complete setup instructions, see [`specs/installation-setup.md`](specs/installation-setup.md).
+
+## 🔌 Tool Integration
+
+MyAI seamlessly integrates with your favorite AI development tools:
+
+### Claude Code
+- Automatic settings synchronization
+- Agent directory management
+- MCP server configuration
+
+### Cursor
+- Dynamic rule generation from agents
+- Project-specific configurations
+- Automatic .cursorrules updates
+
+Learn about integrations in [`specs/tool-integrations.md`](specs/tool-integrations.md).
+
+## 🔒 Security
+
+MyAI is built with security-first principles:
+
+- Secure file permissions (600/700)
+- Environment variable support for sensitive data
+- Input validation and sanitization
+- Audit logging for enterprise compliance
+
+Read more in [`specs/security.md`](specs/security.md).
+
+## 🌐 Internationalization
+
+MyAI supports multiple languages:
+- English (en)
+- Spanish (es)
+- French (fr)
+- German (de)
+- Japanese (ja)
+- Chinese Simplified (zh-CN)
+
+See the [User Guide](specs/user-guide.md#internationalization) for language configuration.
+
+## 📖 Complete Documentation
+
+For comprehensive documentation, explore the [`specs/`](specs/) directory:
+
+- [`specs/README.md`](specs/README.md) - Overview of all specifications
+- Individual specification documents for deep dives into each component
 
 ## 🤝 Contributing
 
-This system is designed to be extensible. Contributions welcome for:
-- New agent profiles
-- Additional hook scripts
-- Team configurations
-- Workflow definitions
-- Documentation improvements
+MyAI is designed to be extensible. Key areas for contribution:
+
+- New tool adapters
+- Additional agent templates
+- Language translations
+- Security enhancements
 
 ## 📄 License
 
-This project provides a framework for AI development teams. Use responsibly and in accordance with your organization's policies.
+[License details to be added]
+
+## 🙏 Acknowledgments
+
+MyAI integrates with and builds upon the excellent work of:
+- [Agent-OS](https://github.com/buildermethods/agent-os) - Foundational agent patterns
+- [Claude Code](https://claude.ai/code) - AI coding assistant
+- [Cursor](https://cursor.sh) - AI-powered code editor
+
+---
+
+For detailed implementation specifications and technical documentation, please refer to the [`specs/`](specs/) directory.

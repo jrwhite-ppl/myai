@@ -1,1 +1,0 @@
-../../.myagents/agents/finance_team_leader.md

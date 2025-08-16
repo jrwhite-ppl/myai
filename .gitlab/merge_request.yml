@@ -1,0 +1,55 @@
+include:
+  - .gitlab/abstract.yml
+
+lint:
+  extends: .base_validate
+  script:
+    - make lint
+
+test:
+  extends:
+    - .base_validate
+    - .only_on_mr
+  script:
+    - make test
+
+mr-build:
+  extends:
+    - .only_on_mr
+  needs: []
+  stage: package
+  image:
+    name: $ECR_URL/myai-al2-py311:latest
+  script:
+    # sub dashes with '+' for the uv version otherwise uv fails
+    - uv version $(echo $VERSION | sed 's/-/+/g')
+    - python3.11 -m pip install uv
+    - >-
+      uv run -e default python -- -m
+      nuitka src/myai/cli.py
+      --assume-yes-for-downloads 
+      --standalone 
+      --onefile 
+      --lto=no
+      --follow-imports
+    - mv cli.bin myai
+    # publish to artifactory
+    - tar cvzf myai-$VERSION.tgz myai
+    - CHECKSUM=`sha256sum mr-bt-$VERSION.tgz | cut -d' ' -f1`
+    - echo $CHECKSUM
+    - >-
+      curl --fail -v -u $JFROG_ARTIFACTORY_USER:$JFROG_ARTIFACTORY_TOKEN
+      -H "X-Checksum-Sha256: $CHECKSUM"
+      -XPUT -T myai-$VERSION.tgz $JFROG_ARTIFACTORY_BASE_URI/generic-local/myai/$VERSION/myai-$VERSION.tgz
+    # publish current_version.txt
+    - echo $VERSION > myai-current_version.txt
+    - echo myai-current_version.txt
+    - CHECKSUM=`sha256sum mr-current_version.txt | cut -d' ' -f1`
+    - >-
+      curl --fail -v -u $JFROG_ARTIFACTORY_USER:$JFROG_ARTIFACTORY_TOKEN 
+      -H 'X-Checksum-Deploy: false' -H "X-Checksum-Sha256: $CHECKSUM"
+      -XPUT -T myai-current_version.txt $JFROG_ARTIFACTORY_BASE_URI/generic-local/myai/myai-version.txt
+  artifacts:
+    paths:
+      - myai
+  when: manual

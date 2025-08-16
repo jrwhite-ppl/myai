@@ -1,0 +1,25 @@
+stages:
+  - pre-build
+  - test
+  - package
+  - review
+
+include:
+  - .gitlab/abstract.yml
+  - .gitlab/merge_request.yml
+  - .gitlab/main.yml
+
+variables:
+  VERSION: 1.0.$CI_PIPELINE_IID-$CI_COMMIT_SHORT_SHA
+  MAIN_BRANCH: main
+
+workflow:
+  # Only kick off pipelines when:
+  # - There is a merge request, and the MR is not marked as Draft
+  # - There is a push to main , or a new tag is pushed.
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE !~ /^Draft:/'
+      when: always
+    - if: '$CI_PIPELINE_SOURCE == "push" && (($CI_COMMIT_BRANCH != null && $CI_COMMIT_BRANCH == "main") || ($CI_COMMIT_TAG != null && $CI_COMMIT_TAG != ""))'
+      when: always
+    - when: never

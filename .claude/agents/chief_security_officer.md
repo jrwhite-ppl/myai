@@ -1,1 +1,0 @@
-../../.myagents/agents/chief_security_officer.md

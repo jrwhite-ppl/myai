@@ -1,1 +1,0 @@
-../../.myagents/agents/security_analyst.md

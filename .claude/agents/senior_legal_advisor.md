@@ -1,1 +1,0 @@
-../../.myagents/agents/senior_legal_advisor.md

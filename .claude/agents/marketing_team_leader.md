@@ -1,1 +1,0 @@
-../../.myagents/agents/marketing_team_leader.md

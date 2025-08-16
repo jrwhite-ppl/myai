@@ -1,1 +1,0 @@
-../../.myagents/agents/finance_specialist.md

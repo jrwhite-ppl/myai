@@ -1,0 +1,23 @@
+.only_on_tags:
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+$/'
+
+.only_on_main:
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+.only_on_mr:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+.base_validate:
+  image:
+    name: public.ecr.aws/docker/library/python:3.11.10
+    entrypoint: [""]
+  stage: test
+  needs: []
+  before_script:
+    - pip3 install uv
+  rules:
+    - !reference [.only_on_mr, rules]
+    - !reference [.only_on_tags, rules]

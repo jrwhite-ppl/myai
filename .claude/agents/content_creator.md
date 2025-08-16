@@ -1,1 +1,0 @@
-../../.myagents/agents/content_creator.md

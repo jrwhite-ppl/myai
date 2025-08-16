@@ -1,1 +1,0 @@
-../../.myagents/agents/contract_specialist.md

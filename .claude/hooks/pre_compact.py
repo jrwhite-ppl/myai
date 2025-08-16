@@ -1,1 +1,0 @@
-../../.myagents/hooks/pre_compact.py
