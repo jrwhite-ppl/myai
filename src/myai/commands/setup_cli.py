@@ -1,13 +1,10 @@
 """
-Okta Identity Service Provider (IdP) typer CLI command interface.
+MyAI Setup CLI command interface.
 """
 
-import asyncio
 from enum import Enum
-from typing import Optional
 
 import typer
-from typing_extensions import Annotated
 
 app = typer.Typer()
 
@@ -39,7 +36,7 @@ def callback(ctx: typer.Context):
 
 # Subcommand docstrings are used for help messages
 @app.command()
-def all():
+def all_setup():
     """
     Setup MyAI.
 
@@ -48,35 +45,40 @@ def all():
     """
     pass
 
+
 @app.command()
 def global_setup():
     """
     Setup global MyAI configuration.
-    
+
     Examples:
       myai setup global-setup
     """
     pass
 
+
 @app.command()
 def project():
     """
     Setup project MyAI configuration.
-    
+
     Examples:
       myai setup project
     """
     pass
 
+
 @app.command()
-def client(client: str):
+def client(client_name: str):
     """
     Setup client-specific configuration.
-    
+
     Args:
-        client: The client name (e.g., claude, cursor)
-    
+        client_name: The client name (e.g., claude, cursor)
+
     Examples:
       myai setup client claude
     """
+    # TODO: Implement client-specific setup logic in Phase 5
+    _ = client_name  # Acknowledge parameter usage
     pass

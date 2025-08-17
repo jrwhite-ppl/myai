@@ -10,8 +10,16 @@ readme = "README.md"
 authors = [{ name = "MyAgents", email = "myagents@galileo-ft.com" }]
 requires-python = ">=3.11"
 dependencies = [
-    "rich==13.5.2",
-    "typer==0.16.0",
+    "typer>=0.9.0",
+    "rich>=13.0.0",
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "httpx>=0.24.0",
+    "watchdog>=3.0.0",
+    "GitPython>=3.1.0",
+    "PyYAML>=6.0",
+    "toml>=0.10.0",
+    "keyring>=24.0.0",
 ]
 
 [project.scripts]
@@ -19,27 +27,20 @@ myai = "myai.cli:main"
 
 [project.optional-dependencies]
 test = [
-    "coverage==7.3.0",
-    "httpx==0.24.1",
-    "mockito==1.4.0",
-    "pytest==7.4.0",
-    "pytest-cov==5.0.0",
-    "responses==0.25.0",
-    "pytest-asyncio==0.21.1",
-    "pytest-xdist", 
-    "awscli==1.32.47",
-    "aws-cdk-lib==2.94.0",
-    "constructs>=10.2.70",
-    "cdk_nag>=2.0.0",
-    "Nuitka==2.0.5",
-    "pydantic>=2.0.0",
-    "pydantic-settings>=2.0.0"
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-xdist",
+    "coverage>=7.0.0",
+    "responses>=0.25.0",
+    "mockito>=1.4.0",
 ]
 lint = [
-    "black==24.3.0",
-    "mypy==1.9.0",
-    "ruff==0.3.3",
-    "isort==5.13.2",
+    "black>=23.0.0",
+    "mypy>=1.0.0",
+    "ruff>=0.1.0",
+    "pre-commit>=3.0.0",
+    "types-PyYAML",
 ]
 
 [tool.uv]
@@ -123,8 +124,14 @@ unfixable = [
 [[tool.mypy.overrides]]
 module = [
     "rich.*",
+    "myai.data.hooks.*",
 ]
 ignore_missing_imports = true
+
+[tool.mypy]
+exclude = [
+    "src/myai/data/hooks/",
+]
 
 [tool.ruff.lint.isort]
 known-first-party = ["myai"]
@@ -136,6 +143,8 @@ ban-relative-imports = "all"
 [tool.ruff.lint.per-file-ignores]
 # Tests can use magic values, assertions, and relative imports
 "tests/**/*" = ["PLR2004", "S101", "TID252"]
+# Legacy Agent-OS data files - ignore most checks until Phase 6 refactor
+"src/myai/data/hooks/**/*" = ["ALL"]
 
 [tool.isort]
 multi_line_output = 3

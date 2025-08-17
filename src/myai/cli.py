@@ -1,13 +1,8 @@
-import os
-import stat
-import sys
-import tarfile
-from typing import Annotated, Optional
+import rich
+import typer
 
 from myai.__about__ import __version__
 from myai.commands import setup_cli
-import rich
-import typer
 
 app = typer.Typer()
 console = rich.console.Console()

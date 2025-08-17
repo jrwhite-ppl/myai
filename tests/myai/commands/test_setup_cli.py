@@ -1,8 +1,9 @@
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-from myai.commands.setup_cli import all, app, callback, client, global_setup, project
 from typer.testing import CliRunner
+
+from myai.commands.setup_cli import all_setup, app, callback, client, global_setup, project
 
 
 class TestSetupCLI(unittest.TestCase):
@@ -27,7 +28,7 @@ class TestSetupCLI(unittest.TestCase):
 
     def test_setup_all_command(self):
         """Test the setup all command."""
-        result = self.runner.invoke(self.app, ["all"])
+        result = self.runner.invoke(self.app, ["all-setup"])
         self.assertEqual(result.exit_code, 0)
 
     def test_setup_global_setup_command(self):
@@ -69,9 +70,9 @@ class TestSetupCLIFunctions(unittest.TestCase):
         """Test the all function directly."""
         # This function currently just passes, so we just test it doesn't raise an error
         try:
-            all()
+            all_setup()
         except Exception as e:
-            self.fail(f"all() raised {e} unexpectedly!")
+            self.fail(f"all_setup() raised {e} unexpectedly!")
 
     def test_global_setup_function(self):
         """Test the global_setup function directly."""
@@ -113,9 +114,9 @@ class TestSetupCLICallback(unittest.TestCase):
         mock_ctx = MagicMock()
         mock_ctx.invoked_subcommand = None
         mock_ctx.app = app  # Use the real app
-        
+
         callback(mock_ctx)
-        
+
         # Verify that ctx.invoke was called with help
         mock_ctx.invoke.assert_called_once_with(app, ["--help"])
 
@@ -123,9 +124,9 @@ class TestSetupCLICallback(unittest.TestCase):
         """Test callback when a subcommand is provided."""
         mock_ctx = MagicMock()
         mock_ctx.invoked_subcommand = "all"
-        
+
         callback(mock_ctx)
-        
+
         # Verify that ctx.invoke was not called
         mock_ctx.invoke.assert_not_called()
 
@@ -136,7 +137,7 @@ class TestSetupCLIWithMockedDependencies(unittest.TestCase):
     def test_outputs_enum(self):
         """Test the Outputs enum."""
         from myai.commands.setup_cli import Outputs
-        
+
         self.assertEqual(Outputs.pretty, "pretty")
         self.assertEqual(Outputs.json, "json")
         self.assertIn("pretty", [e.value for e in Outputs])
@@ -153,7 +154,7 @@ class TestSetupCLIIntegration(unittest.TestCase):
 
     def test_setup_all_integration(self):
         """Integration test for setup all command."""
-        result = self.runner.invoke(self.app, ["all"])
+        result = self.runner.invoke(self.app, ["all-setup"])
         self.assertEqual(result.exit_code, 0)
 
     def test_setup_global_setup_integration(self):
@@ -169,7 +170,7 @@ class TestSetupCLIIntegration(unittest.TestCase):
     def test_setup_client_integration(self):
         """Integration test for setup client command."""
         test_clients = ["claude", "cursor", "windsurf", "agent-os"]
-        
+
         for client_name in test_clients:
             with self.subTest(client=client_name):
                 result = self.runner.invoke(self.app, ["client", client_name])
@@ -181,5 +182,5 @@ class TestSetupCLIIntegration(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)  # Currently just passes
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

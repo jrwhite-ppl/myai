@@ -1,8 +1,9 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from myai.cli import app, main, version
 from typer.testing import CliRunner
+
+from myai.cli import app, main, version
 
 
 class TestCLI(unittest.TestCase):
@@ -55,27 +56,27 @@ class TestCLI(unittest.TestCase):
 class TestCLIFunctions(unittest.TestCase):
     """Test cases for individual CLI functions."""
 
-    @patch('builtins.print')
+    @patch("builtins.print")
     def test_version_function(self, mock_print):
         """Test the version function directly."""
         version()
         mock_print.assert_called_once_with("0.0.1")
 
-    @patch('myai.cli.setup_cli')
-    @patch('myai.cli.app')
+    @patch("myai.cli.setup_cli")
+    @patch("myai.cli.app")
     def test_main_function(self, mock_app, mock_setup_cli):
         """Test the main function."""
         # Mock the setup_cli.app
         mock_setup_app = MagicMock()
         mock_setup_cli.app = mock_setup_app
-        
+
         main()
-        
+
         # Verify setup_cli.app was added to the main app
         mock_app.add_typer.assert_called_once_with(mock_setup_app, name="setup")
         # Verify the main app was called
         mock_app.assert_called_once()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

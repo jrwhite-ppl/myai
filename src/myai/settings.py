@@ -1,9 +1,4 @@
-import os
-import re
-from typing import ClassVar, List
-
 from pydantic_settings import BaseSettings
-import requests
 
 
 class Settings(BaseSettings):
