@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set
 
+from myai.config.env_parser import EnvParser
 from myai.config.hierarchy import ConfigurationHierarchy
 from myai.config.merger import ConfigurationMerger, ConflictResolution
 from myai.config.watcher import ConfigurationWatcher
@@ -70,6 +71,9 @@ class ConfigurationManager:
         self._hierarchy = ConfigurationHierarchy(self._config_storage, self.base_path)
         self._merger = ConfigurationMerger()
 
+        # Environment variable parser
+        self._env_parser = EnvParser(load_dotenv=True)
+
         # Cache settings
         self._cache_enabled = cache_enabled
         self._cache_ttl = cache_ttl
@@ -122,6 +126,10 @@ class ConfigurationManager:
 
         # Load and merge configurations
         merged_config = self._config_storage.merge_configs(levels)
+
+        # Expand environment variables in the merged configuration
+        expanded_config_dict = self._env_parser.expand(merged_config.model_dump())
+        merged_config = MyAIConfig.model_validate(expanded_config_dict)
 
         # Cache the result
         if self._cache_enabled:
@@ -758,6 +766,262 @@ class ConfigurationManager:
         except Exception as e:
             msg = f"Failed to reset {level} configuration: {e}"
             raise RuntimeError(msg) from e
+
+    # Environment Variable Support Methods
+
+    def expand_env_vars(self, value: Any) -> Any:
+        """
+        Expand environment variables in a value.
+
+        Args:
+            value: Value to expand (can be string, dict, list, etc.)
+
+        Returns:
+            Value with environment variables expanded
+        """
+        return self._env_parser.expand(value)
+
+    def validate_env_expansion(self, text: str) -> Dict[str, Any]:
+        """
+        Validate that environment variables in a text can be expanded.
+
+        Args:
+            text: Text to validate
+
+        Returns:
+            Validation result with missing variables, circular references, etc.
+        """
+        return self._env_parser.validate_expansion(text)
+
+    def get_env_vars(self) -> Dict[str, str]:
+        """Get all available environment variables."""
+        return self._env_parser.get_env_vars()
+
+    def set_env_var(self, key: str, value: str) -> None:
+        """
+        Set an environment variable for configuration expansion.
+
+        Args:
+            key: Environment variable name
+            value: Environment variable value
+        """
+        self._env_parser.set_env_var(key, value)
+        # Invalidate cache since env vars might affect config values
+        self._invalidate_cache()
+
+    def reload_env_vars(self) -> None:
+        """Reload environment variables and .env files."""
+        self._env_parser = EnvParser(load_dotenv=True)
+        # Invalidate cache since env vars might have changed
+        self._invalidate_cache()
+
+    def get_env_info(self) -> Dict[str, Any]:
+        """
+        Get information about environment variable support.
+
+        Returns:
+            Dictionary with environment variable information
+        """
+        env_vars = self._env_parser.get_env_vars()
+        myai_vars = {k: v for k, v in env_vars.items() if k.startswith("MYAI_")}
+
+        return {
+            "total_env_vars": len(env_vars),
+            "myai_specific_vars": myai_vars,
+            "common_vars": {
+                k: env_vars.get(k, "Not set") for k in ["HOME", "USER", "PATH", "XDG_CONFIG_HOME"] if k in env_vars
+            },
+            "dotenv_supported": True,
+            "syntax_supported": ["$VAR", "${VAR}", "${VAR:-default}"],
+        }
+
+    # Interactive Conflict Resolution Methods
+
+    def resolve_conflicts_interactively(
+        self,
+        levels: Optional[List[str]] = None,
+        interactive_mode: str = "cli",
+        **kwargs: Any,
+    ) -> Dict[str, Any]:
+        """
+        Resolve configuration conflicts interactively.
+
+        Args:
+            levels: Configuration levels to merge (defaults to all)
+            interactive_mode: Interactive resolution mode ('cli', 'batch', 'auto')
+            **kwargs: Additional arguments for interactive resolver
+
+        Returns:
+            Dictionary with resolution results and conflict information
+        """
+        if levels is None:
+            levels = self._hierarchy_levels.copy()
+
+        # Load configurations for each level
+        configs = []
+        for level in levels:
+            config = self._config_storage.load_config(level)
+            if config is not None:
+                configs.append((level, config))
+
+        min_configs_for_conflicts = 2
+        if len(configs) < min_configs_for_conflicts:
+            return {
+                "resolved": True,
+                "conflicts": [],
+                "message": "No conflicts found (less than 2 configurations loaded)",
+                "merged_config": None,
+            }
+
+        # Perform interactive merge
+        try:
+            resolved_config, unresolved_conflicts, details = self._merger.merge_configurations_interactively(
+                configs, interactive_mode=interactive_mode, **kwargs
+            )
+
+            # Cache the resolved configuration
+            cache_key = ",".join(levels)
+            if self._cache_enabled:
+                self._set_cache(cache_key, resolved_config)
+
+            return {
+                "resolved": len(unresolved_conflicts) == 0,
+                "merged_config": resolved_config,
+                "conflicts": [c.to_dict() for c in unresolved_conflicts],
+                "resolution_details": details,
+                "cache_updated": self._cache_enabled,
+            }
+
+        except Exception as e:
+            return {
+                "resolved": False,
+                "error": str(e),
+                "conflicts": [],
+                "message": f"Failed to resolve conflicts: {e}",
+            }
+
+    def preview_configuration_conflicts(
+        self,
+        levels: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Preview configuration conflicts without resolving them.
+
+        Args:
+            levels: Configuration levels to check (defaults to all)
+
+        Returns:
+            Dictionary with conflict preview information
+        """
+        if levels is None:
+            levels = self._hierarchy_levels.copy()
+
+        # Load configurations for each level
+        configs = []
+        for level in levels:
+            config = self._config_storage.load_config(level)
+            if config is not None:
+                configs.append((level, config))
+
+        min_configs_for_conflicts = 2
+        if len(configs) < min_configs_for_conflicts:
+            return {
+                "has_conflicts": False,
+                "message": "No conflicts possible (less than 2 configurations loaded)",
+                "total_conflicts": 0,
+            }
+
+        # Get conflict preview
+        preview = self._merger.preview_conflicts(configs)
+        preview["levels_analyzed"] = levels
+        preview["configurations_found"] = len(configs)
+
+        return preview
+
+    def create_conflict_resolution_rules(
+        self,
+        rules_file: str,
+        *,
+        template: bool = True,
+    ) -> bool:
+        """
+        Create a conflict resolution rules file for batch processing.
+
+        Args:
+            rules_file: Path to create rules file
+            template: Whether to create a template with examples
+
+        Returns:
+            True if file was created successfully
+        """
+        import json
+        from pathlib import Path
+
+        try:
+            rules_path = Path(rules_file)
+            rules_path.parent.mkdir(parents=True, exist_ok=True)
+
+            if template:
+                template_rules = {
+                    "_comment": "Conflict resolution rules for MyAI configuration merging",
+                    "_syntax": {
+                        "path_pattern": "action",
+                        "available_actions": ["source1", "source2", "higher_priority", "merge"],
+                        "complex_rules": {"action": "custom", "value": "custom_value_here"},
+                    },
+                    "*.debug": "source2",  # Always use newer debug settings
+                    "*.paths.*": "merge",  # Merge path configurations
+                    "security.*": "source1",  # Prefer higher priority for security
+                    "integrations.*.enabled": "source2",  # Use latest integration settings
+                    "agents.default_category": {"action": "custom", "value": "general"},
+                    "*password*": "source1",  # Security-sensitive fields use higher priority
+                    "*.cache.*": "merge",  # Merge cache configurations
+                }
+            else:
+                template_rules = {
+                    "_comment": "Add your conflict resolution rules here",
+                    "_example": {
+                        "path.pattern": "action_name",
+                        "another.pattern": {"action": "custom", "value": "your_custom_value"},
+                    },
+                }
+
+            with open(rules_path, "w", encoding="utf-8") as f:
+                json.dump(template_rules, f, indent=2)
+
+            return True
+
+        except Exception as e:
+            print(f"Failed to create rules file {rules_file}: {e}")
+            return False
+
+    def load_conflict_resolution_rules(self, rules_file: str) -> bool:
+        """
+        Load conflict resolution rules from file.
+
+        Args:
+            rules_file: Path to rules file
+
+        Returns:
+            True if rules were loaded successfully
+        """
+        try:
+            # This could be extended to store rules in the configuration manager
+            # For now, we'll just validate the file exists and is valid
+            import json
+            from pathlib import Path
+
+            rules_path = Path(rules_file)
+            if not rules_path.exists():
+                return False
+
+            with open(rules_path, encoding="utf-8") as f:
+                _rules = json.load(f)
+
+            return True
+
+        except Exception:
+            return False
 
 
 # Convenience function for getting the singleton instance

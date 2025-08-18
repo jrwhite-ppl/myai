@@ -265,9 +265,16 @@ class DeepMergeStrategy(MergeStrategyBase):
             else:
                 return conflict.higher_priority_value
         elif resolution == ConflictResolution.INTERACTIVE:
-            # In a real implementation, this would prompt the user
-            # For now, fall back to higher priority
-            return conflict.higher_priority_value
+            # Use the interactive resolver
+            from myai.config.interactive_resolver import InteractiveMode, get_interactive_resolver
+
+            resolver = get_interactive_resolver(InteractiveMode.CLI)
+            # Create unique session ID (unused but kept for potential future use)
+            _session_id = resolver.__class__.__module__.replace(".", "_") + "_session"
+            from myai.config.interactive_resolver import ConflictResolutionSession
+
+            session_obj = ConflictResolutionSession(InteractiveMode.CLI)
+            return resolver.resolve_conflict(conflict, session_obj)
         elif resolution == ConflictResolution.ABORT:
             msg = f"Merge aborted due to conflict: {conflict.message}"
             raise ValueError(msg)
@@ -536,3 +543,99 @@ class ConfigurationMerger:
             current = current[key]
 
         current[keys[-1]] = value
+
+    def merge_configurations_interactively(
+        self,
+        configs: List[Tuple[str, MyAIConfig]],
+        strategy: MergeStrategy = MergeStrategy.MERGE,
+        interactive_mode: str = "cli",
+        **kwargs: Any,
+    ) -> Tuple[MyAIConfig, List[ConfigConflict], Dict[str, Any]]:
+        """
+        Merge configurations with interactive conflict resolution.
+
+        Args:
+            configs: List of (source_name, config) tuples
+            strategy: Merge strategy to use
+            interactive_mode: Interactive resolution mode ('cli', 'batch', 'auto')
+            **kwargs: Additional arguments for interactive resolver
+
+        Returns:
+            Tuple of (merged_config, unresolved_conflicts, resolution_details)
+        """
+        from myai.config.interactive_resolver import (
+            InteractiveMode,
+            resolve_conflicts_interactively,
+        )
+
+        # First, perform merge with automatic conflict detection
+        merged_config, conflicts = self.merge_configurations(configs, strategy, ConflictResolution.HIGHER_PRIORITY)
+
+        if not conflicts:
+            # No conflicts - return merged config
+            return merged_config, [], {}
+
+        # Resolve conflicts interactively
+        mode_map = {
+            "cli": InteractiveMode.CLI,
+            "batch": InteractiveMode.BATCH,
+            "auto": InteractiveMode.AUTO,
+            "web": InteractiveMode.WEB,
+        }
+
+        mode = mode_map.get(interactive_mode, InteractiveMode.CLI)
+        resolutions = resolve_conflicts_interactively(conflicts, mode, **kwargs)
+
+        # Apply resolutions to merged config
+        merged_dict = merged_config.model_dump()
+        for path, resolved_value in resolutions.items():
+            self._set_nested_value(merged_dict, path, resolved_value)
+
+        # Create new config with resolved values
+        resolved_config = MyAIConfig.model_validate(merged_dict)
+
+        # Find any unresolved conflicts
+        unresolved = [c for c in conflicts if c.path not in resolutions]
+
+        resolution_details = {
+            "total_conflicts": len(conflicts),
+            "resolved_conflicts": len(resolutions),
+            "unresolved_conflicts": len(unresolved),
+            "interactive_mode": interactive_mode,
+            "resolutions": {path: str(value) for path, value in resolutions.items()},
+        }
+
+        return resolved_config, unresolved, resolution_details
+
+    def preview_conflicts(
+        self,
+        configs: List[Tuple[str, MyAIConfig]],
+        strategy: MergeStrategy = MergeStrategy.MERGE,
+    ) -> Dict[str, Any]:
+        """
+        Preview conflicts that would occur during merge without resolving them.
+
+        Args:
+            configs: List of (source_name, config) tuples
+            strategy: Merge strategy to use
+
+        Returns:
+            Dictionary with conflict preview information
+        """
+        _merged_config, conflicts = self.merge_configurations(configs, strategy, ConflictResolution.HIGHER_PRIORITY)
+
+        conflict_summary: Dict[str, List[Dict[str, Any]]] = {}
+        for conflict in conflicts:
+            conflict_type = conflict.conflict_type
+            if conflict_type not in conflict_summary:
+                conflict_summary[conflict_type] = []
+            conflict_summary[conflict_type].append(conflict.to_dict())
+
+        conflict_threshold_for_batch = 5
+        return {
+            "total_conflicts": len(conflicts),
+            "conflict_types": list(conflict_summary.keys()),
+            "conflicts_by_type": conflict_summary,
+            "needs_interactive_resolution": len(conflicts) > 0,
+            "suggested_mode": "cli" if len(conflicts) < conflict_threshold_for_batch else "batch",
+        }

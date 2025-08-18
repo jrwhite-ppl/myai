@@ -12,6 +12,18 @@ from typing import Dict, List, Optional, Union
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
+class PathManager:
+    """Simple path manager for MyAI paths."""
+
+    def __init__(self):
+        self._user_path = Path.home() / ".myai"
+
+    def get_user_path(self) -> Path:
+        """Get the user's MyAI directory path."""
+        self._user_path.mkdir(parents=True, exist_ok=True)
+        return self._user_path
+
+
 class PathConfig(BaseModel):
     """Configuration for various file and directory paths."""
 
