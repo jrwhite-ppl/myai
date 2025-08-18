@@ -27,6 +27,13 @@ def register_builtin_adapters():
     except ImportError:
         pass  # Optional dependency
 
+    try:
+        from myai.integrations.agentos import register_agentos_adapter
+
+        register_agentos_adapter()
+    except ImportError:
+        pass  # Optional dependency
+
 
 # Auto-register adapters when module is imported
 register_builtin_adapters()
