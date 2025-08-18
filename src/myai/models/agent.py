@@ -177,30 +177,15 @@ class AgentSpecification(BaseModel):
             frontmatter_lines = lines[1:frontmatter_end]
             content_lines = lines[frontmatter_end + 1 :]
 
-            # Parse frontmatter
-            frontmatter_dict = {}
-            for line in frontmatter_lines:
-                if ":" in line:
-                    key, value = line.split(":", 1)
-                    key = key.strip()
-                    value = value.strip()
+            # Parse frontmatter using YAML
+            import yaml
 
-                    # Parse different value types
-                    if value.startswith("[") and value.endswith("]"):
-                        # Parse list
-                        import ast
-
-                        frontmatter_dict[key] = ast.literal_eval(value)
-                    elif value.lower() in ("true", "false"):
-                        frontmatter_dict[key] = value.lower() == "true"
-                    elif value.replace(".", "").isdigit() and value.count(".") <= 1:
-                        # Parse number (but not version strings like 1.0.0)
-                        try:
-                            frontmatter_dict[key] = float(value) if "." in value else int(value)
-                        except ValueError:
-                            frontmatter_dict[key] = value
-                    else:
-                        frontmatter_dict[key] = value
+            frontmatter_yaml = "\n".join(frontmatter_lines)
+            try:
+                frontmatter_dict = yaml.safe_load(frontmatter_yaml) or {}
+            except yaml.YAMLError as e:
+                msg = f"Invalid YAML in frontmatter: {e}"
+                raise ValueError(msg) from e
 
             agent_content = "\n".join(content_lines).strip()
         else:
@@ -224,7 +209,11 @@ class AgentSpecification(BaseModel):
         # Parse datetime fields
         for field in ["created", "modified"]:
             if field in frontmatter_dict:
-                metadata_dict[field] = datetime.fromisoformat(frontmatter_dict[field])
+                value = frontmatter_dict[field]
+                if isinstance(value, str):
+                    metadata_dict[field] = datetime.fromisoformat(value)
+                else:
+                    metadata_dict[field] = value
 
         metadata = AgentMetadata(**metadata_dict)
 

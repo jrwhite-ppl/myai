@@ -1,9 +1,9 @@
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from typer.testing import CliRunner
 
-from myai.cli import app, main, version
+from myai.app import app, main
 
 
 class TestCLI(unittest.TestCase):
@@ -17,15 +17,16 @@ class TestCLI(unittest.TestCase):
     def test_cli_help(self):
         """Test that the CLI shows help when no command is provided."""
         result = self.runner.invoke(self.app, [])
-        self.assertEqual(result.exit_code, 0)
-        self.assertIn("Interact with MyAI with this command", result.stdout)
+        # Typer exits with code 2 when no command provided to show help
+        self.assertEqual(result.exit_code, 2)
+        self.assertIn("MyAI - AI Agent and Configuration Management CLI", result.stdout)
         self.assertIn("Commands", result.stdout)
 
     def test_cli_help_flag(self):
         """Test that the CLI shows help with --help flag."""
         result = self.runner.invoke(self.app, ["--help"])
         self.assertEqual(result.exit_code, 0)
-        self.assertIn("Interact with MyAI with this command", result.stdout)
+        self.assertIn("MyAI - AI Agent and Configuration Management CLI", result.stdout)
         self.assertIn("Commands", result.stdout)
 
     def test_version_command(self):
@@ -45,7 +46,7 @@ class TestCLI(unittest.TestCase):
             # For now, let's skip this test until we understand the issue
             self.skipTest("Setup subcommand help test needs investigation")
         self.assertEqual(result.exit_code, 0)
-        self.assertIn("Interact with MyAI with this command", result.stdout)
+        self.assertIn("Setup and initialization commands", result.stdout)
 
     def test_invalid_command(self):
         """Test that invalid commands return error."""
@@ -56,24 +57,21 @@ class TestCLI(unittest.TestCase):
 class TestCLIFunctions(unittest.TestCase):
     """Test cases for individual CLI functions."""
 
-    @patch("builtins.print")
-    def test_version_function(self, mock_print):
-        """Test the version function directly."""
-        version()
-        mock_print.assert_called_once_with("0.0.1")
+    def setUp(self):
+        """Set up test fixtures."""
+        self.runner = CliRunner()
+        self.app = app
 
-    @patch("myai.cli.setup_cli")
-    @patch("myai.cli.app")
-    def test_main_function(self, mock_app, mock_setup_cli):
+    def test_version_function(self):
+        """Test the version function via CLI."""
+        result = self.runner.invoke(self.app, ["version", "--short"])
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("0.0.1", result.stdout)
+
+    @patch("myai.app.app")
+    def test_main_function(self, mock_app):
         """Test the main function."""
-        # Mock the setup_cli.app
-        mock_setup_app = MagicMock()
-        mock_setup_cli.app = mock_setup_app
-
         main()
-
-        # Verify setup_cli.app was added to the main app
-        mock_app.add_typer.assert_called_once_with(mock_setup_app, name="setup")
         # Verify the main app was called
         mock_app.assert_called_once()
 

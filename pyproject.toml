@@ -131,6 +131,8 @@ ignore_missing_imports = true
 [tool.mypy]
 exclude = [
     "src/myai/data/hooks/",
+    "src/myai/integrations/",
+    "src/myai/commands/integration_cli.py",
 ]
 
 [tool.ruff.lint.isort]

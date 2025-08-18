@@ -670,6 +670,95 @@ class ConfigurationManager:
                 # Remove broken watchers
                 self._watchers.discard(callback)
 
+    def validate_configuration(self) -> List[str]:
+        """
+        Validate the current configuration.
+
+        Returns:
+            List of validation error messages
+        """
+        issues = []
+
+        try:
+            # Get merged configuration
+            config = self.get_config()
+
+            # Validate tools configuration
+            if hasattr(config, "tools"):
+                tools = config.tools
+                claude_config = tools.get("claude")
+                if claude_config and hasattr(claude_config, "model") and not claude_config.model:
+                    issues.append("Claude configuration missing model")
+
+                cursor_config = tools.get("cursor")
+                if cursor_config and hasattr(cursor_config, "rules_path") and cursor_config.rules_path:
+                    rules_path = Path(cursor_config.rules_path)
+                    if not rules_path.parent.exists():
+                        issues.append(f"Cursor rules directory does not exist: {rules_path.parent}")
+
+            # Validate paths configuration
+            if hasattr(config, "paths"):
+                paths = config.paths
+                if paths.agents_dir:
+                    agents_path = Path(paths.agents_dir)
+                    if not agents_path.exists():
+                        issues.append(f"Agents directory does not exist: {agents_path}")
+
+                if paths.config_dir:
+                    config_path = Path(paths.config_dir)
+                    if not config_path.exists():
+                        issues.append(f"Config directory does not exist: {config_path}")
+
+        except Exception as e:
+            issues.append(f"Configuration validation error: {e}")
+
+        return issues
+
+    def reset_configuration(self, level: str) -> None:
+        """
+        Reset configuration at the specified level to defaults.
+
+        Args:
+            level: Configuration level to reset (user, project, team)
+        """
+        if level not in self._config_paths:
+            msg = f"Invalid configuration level: {level}"
+            raise ValueError(msg)
+
+        config_path = self._config_paths[level]
+        if not config_path:
+            msg = f"No configuration file set for level: {level}"
+            raise ValueError(msg)
+
+        try:
+            # Remove the configuration file
+            if config_path.exists():
+                config_path.unlink()
+
+            # Clear cached configuration for this level
+            # Note: Cache is managed by _invalidate_cache() call below
+
+            # Invalidate merged cache
+            self._invalidate_cache()
+
+            # Create default configuration if it's the user level
+            if level == "user":
+                from myai.models.config import ConfigMetadata, ConfigSettings
+
+                metadata = ConfigMetadata(
+                    source=ConfigSource(level),
+                    priority=self._get_default_priority(level),
+                )
+                default_config = MyAIConfig(
+                    metadata=metadata,
+                    settings=ConfigSettings(),
+                )
+                self._config_storage.save_config(default_config, level)
+
+        except Exception as e:
+            msg = f"Failed to reset {level} configuration: {e}"
+            raise RuntimeError(msg) from e
+
 
 # Convenience function for getting the singleton instance
 def get_config_manager() -> ConfigurationManager:

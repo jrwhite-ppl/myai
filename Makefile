@@ -1,4 +1,4 @@
-.PHONY: lint build test help install dev clean
+.PHONY: pre-ci fmt lint build test help install dev clean
 
 pre-ci: fmt lint test ## run this before committing
 
