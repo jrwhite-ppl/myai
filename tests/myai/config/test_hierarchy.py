@@ -395,9 +395,20 @@ tools:
         team_paths = self.hierarchy._get_team_paths()
         assert len(team_paths) > 0
 
-        # Test project paths
-        project_paths = self.hierarchy._get_project_paths()
-        assert len(project_paths) > 0
+        # Test project paths - create a .myai directory first
+        project_myai = self.temp_dir / ".myai"
+        project_myai.mkdir(exist_ok=True)
+
+        # Change to temp directory for project path discovery
+        import os
+
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(self.temp_dir)
+            project_paths = self.hierarchy._get_project_paths()
+            assert len(project_paths) > 0
+        finally:
+            os.chdir(original_cwd)
 
     def test_conflict_detection(self):
         """Test configuration conflict detection."""

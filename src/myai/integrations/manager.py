@@ -149,7 +149,7 @@ class IntegrationManager:
                     try:
                         # Check adapter status first
                         status = await adapter.get_status()
-                        if status not in [AdapterStatus.CONFIGURED, AdapterStatus.CONNECTED]:
+                        if status not in [AdapterStatus.CONFIGURED, AdapterStatus.CONNECTED, AdapterStatus.AVAILABLE]:
                             results[name] = {
                                 "status": "skipped",
                                 "reason": f"Adapter status: {status.value}",

@@ -242,17 +242,19 @@ myai agent history <name>
 1. **Scan Directories**
    - Project agents (`.myai/agents/`)
    - User custom agents (`~/.myai/agents/custom/`)
-   - Default agents (`~/.myai/agents/default/`)
+   - Package default agents (`src/myai/data/agents/default/`)
+   - User copied agents (`~/.myai/agents/`)
    - Community agents (`~/.myai/agents/community/`)
 
 2. **Parse Specifications**
-   - Extract metadata from frontmatter
+   - Extract metadata from frontmatter (if present)
+   - Extract metadata from content structure (if no frontmatter)
    - Validate agent structure
    - Compute checksums
 
 3. **Build Registry**
    - Merge discovered agents
-   - Resolve conflicts (project > custom > default)
+   - Resolve conflicts (project > custom > package default)
    - Cache results
 
 4. **Apply Filters**
@@ -260,6 +262,12 @@ myai agent history <name>
    - Category filters
    - Tag matching
    - Tool requirements
+
+### Default Agent Loading
+- Default agents are bundled with the package in `src/myai/data/agents/default/`
+- Agents without YAML frontmatter extract metadata from content structure
+- The `myai setup all-setup` command copies default agents to `~/.myai/agents/`
+- Package agents are always available even without setup
 
 ## Tool Integration
 
@@ -274,26 +282,20 @@ myai agent sync claude [--agents <list>]
 
 ### Cursor Integration
 ```bash
-# Generate Cursor rules from agents
-myai agent sync cursor [--agents <list>]
+# Sync agents to current project's .cursor directory
+myai integration sync cursor
 
-# Creates .cursorrules from agent specifications
+# Creates .cursor/*.cursorrules in the current project
+# Must be run from within a project directory
 ```
 
 ### Agent Transformation
 ```python
 def transform_agent_to_cursor_rules(agent: Agent) -> str:
     """Transform agent spec to Cursor rules format"""
-    rules = f"""
----
-description: {agent.display_name} - {agent.description}
-globs: {agent.file_patterns or '*'}
-alwaysApply: {agent.always_apply}
----
-
-{agent.content}
-"""
-    return rules
+    # For project-level integration, just return the agent content
+    # No metadata or frontmatter needed
+    return agent.content
 ```
 
 ## Agent Templates

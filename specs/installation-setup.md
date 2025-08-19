@@ -8,7 +8,7 @@ This specification defines the installation process, setup workflows, and system
 
 ### Minimum Requirements
 - **Python**: 3.8 or higher
-- **Operating Systems**: 
+- **Operating Systems**:
   - macOS 11.0+ (Big Sur)
   - Ubuntu 20.04+
   - Windows 10+ (with WSL2 recommended)
@@ -136,7 +136,7 @@ check_prerequisites() {
         echo "❌ Python 3.8+ is required"
         exit 1
     fi
-    
+
     # Check pip
     if ! command -v pip3 &> /dev/null; then
         echo "❌ pip is required"
@@ -146,36 +146,36 @@ check_prerequisites() {
 
 install_myai() {
     echo "🚀 Installing MyAI..."
-    
+
     # Create virtual environment
     python3 -m venv "${CONFIG_DIR}/venv"
     source "${CONFIG_DIR}/venv/bin/activate"
-    
+
     # Install package
     pip install --upgrade pip
     pip install myai-cli=="${MYAI_VERSION}"
-    
+
     # Create symlink
     ln -sf "${CONFIG_DIR}/venv/bin/myai" "${INSTALL_DIR}/myai"
-    
+
     echo "✅ MyAI installed successfully"
 }
 
 setup_configuration() {
     echo "📁 Setting up configuration..."
-    
+
     # Create directory structure
     mkdir -p "${CONFIG_DIR}"/{config,agents,backups,logs,cache}
     mkdir -p "${CONFIG_DIR}"/agents/{default,custom}
-    
+
     # Initialize configuration
     myai init --quiet
-    
+
     # Import existing configurations
     if [[ "${IMPORT_EXISTING}" == "true" ]]; then
         myai migrate detect --quiet || true
     fi
-    
+
     echo "✅ Configuration setup complete"
 }
 
@@ -183,26 +183,26 @@ install_default_agents() {
     if [[ "${SKIP_AGENTS}" == "true" ]]; then
         return
     fi
-    
+
     echo "🤖 Installing default agents..."
-    
+
     # Download agent pack
     curl -sSL https://agents.myai.dev/default-pack.tar.gz | \
         tar -xz -C "${CONFIG_DIR}/agents/default"
-    
+
     echo "✅ Default agents installed"
 }
 
 setup_shell_completion() {
     echo "🐚 Setting up shell completion..."
-    
+
     # Detect shell
     if [[ -n "${BASH_VERSION}" ]]; then
         myai --install-completion bash
     elif [[ -n "${ZSH_VERSION}" ]]; then
         myai --install-completion zsh
     fi
-    
+
     echo "✅ Shell completion configured"
 }
 
@@ -210,13 +210,13 @@ setup_shell_completion() {
 main() {
     echo "MyAI CLI Installer"
     echo "=================="
-    
+
     check_prerequisites
     install_myai
     setup_configuration
     install_default_agents
     setup_shell_completion
-    
+
     echo ""
     echo "🎉 Installation complete!"
     echo ""
@@ -233,26 +233,29 @@ main "$@"
 
 ## Post-Installation Setup
 
-### 1. Initial Configuration
+### 1. Comprehensive Setup (Recommended)
 ```bash
-# Quick setup (non-interactive)
-myai init
+# Complete setup with all integrations
+myai setup all-setup
 
-# Guided setup (recommended for first time)
+# This command performs:
+# - Sets up global ~/.myai directory with Agent-OS components
+# - Creates and configures ~/.claude directory with agents
+# - Creates project-level .claude/agents directory with local agent copies
+# - Creates project-level .cursor/rules directory with .mdc files
+# - Syncs all agents to both Claude and Cursor integrations
+```
+
+### 2. Alternative Setup Options
+```bash
+# Guided setup (interactive)
 myai init --mode guided
 
 # Enterprise setup
 myai init --mode enterprise --config-url https://company.com/myai-config
-```
-
-### 2. Tool Integration Setup
-```bash
-# Auto-detect and configure tools
-myai sync detect
 
 # Manual tool setup
-myai sync claude --setup
-myai sync cursor --setup
+myai integration sync --adapters claude,cursor
 ```
 
 ### 3. Verification
@@ -369,28 +372,37 @@ myai migrate version --from 1.0.0 --to 1.1.0
 
 ## Uninstallation
 
-### Complete Uninstall
+### Surgical Uninstall (Preserves User Files)
 ```bash
-# Uninstall script
-curl -sSL https://install.myai.dev/uninstall | bash
+# Remove only MyAI-created files, preserving user customizations
+myai setup uninstall --all
 
-# Or manual uninstall
-myai uninstall --complete
+# Selective removal options:
+myai setup uninstall --global-agents  # Remove only global MyAI agents
+myai setup uninstall --global-config  # Remove only global MyAI config
+myai setup uninstall --claude         # Remove only Claude integration files
+myai setup uninstall --project        # Remove only project-level files
+
+# Force removal without confirmation
+myai setup uninstall --all --force
 
 # This will:
-# 1. Backup configurations to ~/myai-backup-{timestamp}
-# 2. Remove ~/.myai directory
-# 3. Remove tool integrations
-# 4. Uninstall package
+# 1. Remove only MyAI-created agent files
+# 2. Remove only MyAI-created configuration files
+# 3. Preserve all user-created agents and customizations
+# 4. Clean up empty directories after file removal
 ```
 
-### Partial Uninstall
+### Package Uninstall
 ```bash
-# Remove package but keep configs
+# Remove package but keep all configurations
 pip uninstall myai-cli
 
-# Remove specific components
-myai uninstall --components agents,cache
+# Or with pipx
+pipx uninstall myai-cli
+
+# Or with homebrew
+brew uninstall myai
 ```
 
 ## Platform-Specific Considerations

@@ -554,7 +554,7 @@ def _detect_migration_sources() -> Dict[str, Dict[str, int]]:
     sources = {}
 
     # Check for Claude configuration
-    claude_config = Path.home() / ".config" / "claude"
+    claude_config = Path.home() / ".claude"
     if claude_config.exists():
         sources["claude"] = {"agents": 2, "configs": 1}
 

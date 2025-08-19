@@ -202,16 +202,22 @@ class TestAgentOSManager:
 
             self.manager._agentos_path = agentos_dir
 
-            # Test backup
-            backup_path = await self.manager.backup()
-            assert backup_path is not None
-            assert backup_path.exists()
-            assert (backup_path / "agentos" / "test_file.txt").exists()
+            # Mock the backup directory to use temp directory instead of real home
+            backup_base = Path(temp_dir) / ".myai" / "backups"
+            backup_base.mkdir(parents=True, exist_ok=True)
 
-            # Test restore (would require more complex setup)
-            # This is a basic test that restore method works
-            restore_result = await self.manager.restore(backup_path)
-            assert isinstance(restore_result, bool)
+            # Patch Path.home() in the agentos module to return our temp directory for this test
+            with patch("myai.integrations.agentos.Path.home", return_value=Path(temp_dir)):
+                # Test backup
+                backup_path = await self.manager.backup()
+                assert backup_path is not None
+                assert backup_path.exists()
+                assert (backup_path / "agentos" / "test_file.txt").exists()
+
+                # Test restore (would require more complex setup)
+                # This is a basic test that restore method works
+                restore_result = await self.manager.restore(backup_path)
+                assert isinstance(restore_result, bool)
 
 
 class TestPathTranslator:

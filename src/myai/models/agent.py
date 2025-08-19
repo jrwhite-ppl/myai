@@ -189,9 +189,49 @@ class AgentSpecification(BaseModel):
 
             agent_content = "\n".join(content_lines).strip()
         else:
-            # No frontmatter, use content as-is
+            # No frontmatter, try to extract metadata from content
             frontmatter_dict = {}
             agent_content = content.strip()
+
+            # Extract metadata from the agent content structure
+            if file_path:
+                # Skip files that don't look like agents (like readme files)
+                if file_path.stem.lower() in ["readme", "index", "overview", "changelog"]:
+                    # Use a name that will be filtered out
+                    frontmatter_dict["name"] = "unnamed_agent"
+                else:
+                    # Use filename as base for name
+                    name = file_path.stem.replace("_", "-").lower()
+                    frontmatter_dict["name"] = name
+
+                    # Try to extract display name from first heading
+                    for line in lines:
+                        if line.strip().startswith("# ") and not line.strip().startswith("## "):
+                            display_name = line.strip()[2:].strip()
+                            frontmatter_dict["display_name"] = display_name
+                            break
+
+                    # Extract description from Identity section if present
+                    import re
+
+                    identity_match = re.search(r"## Identity\s*\n(.*?)(?=\n##|\Z)", content, re.DOTALL)
+                    if identity_match:
+                        identity_content = identity_match.group(1)
+                        # Look for title line
+                        title_match = re.search(r"[-*]\s*\*\*(?:Title|Role)\*\*:\s*(.+)", identity_content)
+                        if title_match:
+                            frontmatter_dict["description"] = title_match.group(1).strip()
+
+                    # Infer category from directory structure
+                    if file_path.parent.name in [cat.value for cat in AgentCategory]:
+                        frontmatter_dict["category"] = file_path.parent.name
+
+                    # Extract tools from content
+                    tools_section = re.search(r"tools?:\s*\[(.*?)\]", content.lower())
+                    if tools_section:
+                        tools_str = tools_section.group(1)
+                        tools = [t.strip().strip('"\'') for t in tools_str.split(",")]
+                        frontmatter_dict["tools"] = tools
 
         # Create metadata from frontmatter
         metadata_dict = {

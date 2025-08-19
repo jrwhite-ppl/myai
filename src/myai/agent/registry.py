@@ -84,6 +84,14 @@ class AgentRegistry:
             Path.home() / ".config" / "myai" / "agents",
         ]
 
+        # Add default agents from the package
+        import myai
+
+        package_path = Path(myai.__file__).parent
+        default_agents_path = package_path / "data" / "agents" / "default"
+        if default_agents_path.exists():
+            self._discovery_paths.append(default_agents_path)
+
         # Add enterprise path if available
         enterprise_path = Path("/etc/myai/agents")
         if enterprise_path.exists():
@@ -369,9 +377,7 @@ class AgentRegistry:
                 try:
                     # Try to load as agent
                     content = md_file.read_text(encoding="utf-8")
-                    # Check if file has frontmatter (required for agents)
-                    if not content.strip().startswith("---"):
-                        continue
+                    # Now we can handle agents with or without frontmatter
                     agent = AgentSpecification.from_markdown(content, file_path=md_file)
                     # Skip unnamed agents (likely not real agent files)
                     if agent.metadata.name == "unnamed_agent":

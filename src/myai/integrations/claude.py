@@ -65,9 +65,9 @@ class ClaudeAdapter(AbstractAdapter):
             home = Path.home()
             paths.extend(
                 [
-                    home / "Library" / "Application Support" / "Claude",
+                    home / ".claude",  # Primary path according to specs
                     home / ".config" / "claude",
-                    home / ".claude",
+                    home / "Library" / "Application Support" / "Claude",
                 ]
             )
         elif system == "Windows":
@@ -351,9 +351,12 @@ class ClaudeAdapter(AbstractAdapter):
 
         config_path = self._get_primary_config_path()
         if not config_path:
-            result["status"] = "error"
-            result["errors"].append("Claude configuration path not found")
-            return result
+            # If no config path exists, create the primary one (~/.claude)
+            home = Path.home()
+            config_path = home / ".claude"
+            if not dry_run:
+                config_path.mkdir(parents=True, exist_ok=True)
+            result["warnings"].append(f"Created Claude configuration directory at {config_path}")
 
         # Create agents directory
         agents_dir = config_path / "agents"

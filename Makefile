@@ -23,6 +23,7 @@ install: ## install the built package
 test: ## run tests
 	uv run --extra test pytest --cov=./src -vvv -n auto --cov-report term-missing tests/
 
+
 clean: ## clean build artifacts
 	rm -rf dist/
 	rm -rf build/

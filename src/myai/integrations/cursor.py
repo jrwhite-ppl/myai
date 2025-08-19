@@ -159,13 +159,21 @@ class CursorAdapter(AbstractAdapter):
         return [path for path in paths if path.exists()]
 
     def _get_rules_directory(self) -> Path:
-        """Get the directory for storing .cursorrules files."""
+        """Get the directory for storing .cursorrules files.
+
+        For project-level integration, this should be the current project's .cursor directory.
+        """
         if self._rules_directory:
             return self._rules_directory
 
-        # Default rules directory in user's home
-        rules_dir = Path.home() / ".cursor" / "rules"
-        rules_dir.mkdir(parents=True, exist_ok=True)
+        # Project-level rules directory
+        cwd = Path.cwd()
+        rules_dir = cwd / ".cursor"
+
+        # Only create if we're in a project context
+        if cwd != Path.home():
+            rules_dir.mkdir(parents=True, exist_ok=True)
+
         self._rules_directory = rules_dir
         return rules_dir
 
@@ -283,12 +291,23 @@ class CursorAdapter(AbstractAdapter):
 
             # Check rules directory
             rules_dir = self._get_rules_directory()
-            health["checks"]["rules_directory"] = {
-                "status": "pass",
-                "message": f"Rules directory: {rules_dir}",
-                "path": str(rules_dir),
-                "rules_count": len(list(rules_dir.glob("*.cursorrules"))),
-            }
+            cwd = Path.cwd()
+
+            if cwd == Path.home():
+                health["checks"]["rules_directory"] = {
+                    "status": "warning",
+                    "message": "Cursor integration requires project context",
+                    "path": None,
+                    "rules_count": 0,
+                }
+                health["warnings"].append("Run from within a project directory to use Cursor integration")
+            else:
+                health["checks"]["rules_directory"] = {
+                    "status": "pass" if rules_dir.exists() else "info",
+                    "message": f"Project rules directory: {rules_dir}",
+                    "path": str(rules_dir),
+                    "rules_count": len(list(rules_dir.glob("*.cursorrules"))) if rules_dir.exists() else 0,
+                }
 
             # Check version
             version = await self.get_version_info()
@@ -393,7 +412,10 @@ class CursorAdapter(AbstractAdapter):
         return success
 
     async def sync_agents(self, agents: List[Any], *, dry_run: bool = False) -> Dict[str, Any]:
-        """Sync agents to Cursor as .cursorrules files."""
+        """Sync agents to Cursor as project-level .cursorrules files.
+
+        This creates .cursor/ directory in the current project with agent rules.
+        """
         result = {
             "status": "success",
             "synced": 0,
@@ -402,6 +424,13 @@ class CursorAdapter(AbstractAdapter):
             "warnings": [],
             "dry_run": dry_run,
         }
+
+        # Check if we're in a project context
+        cwd = Path.cwd()
+        if cwd == Path.home():
+            result["status"] = "error"
+            result["errors"].append("Cannot sync Cursor rules to home directory. Please run from within a project.")
+            return result
 
         rules_dir = self._get_rules_directory()
 
@@ -431,12 +460,12 @@ class CursorAdapter(AbstractAdapter):
                     result["warnings"].append("Skipped agent with missing name")
                     continue
 
-                # Create rule file path
+                # Create rule file path (using .cursorrules for project rules)
                 rules_file = rules_dir / f"{name}.cursorrules"
 
                 if not dry_run:
-                    # Generate Cursor rules content
-                    cursor_content = self._generate_cursor_rules(name, content, category)
+                    # Generate Cursor rules content for project-level integration
+                    cursor_content = self._generate_project_cursor_rules(name, content, category)
 
                     # Write rule file
                     with open(rules_file, "w", encoding="utf-8") as f:
@@ -450,41 +479,22 @@ class CursorAdapter(AbstractAdapter):
             except Exception as e:
                 result["errors"].append(f"Failed to sync agent '{name}': {e}")
 
+        # Add project-level integration message
+        if not dry_run and result["synced"] > 0:
+            result["message"] = f"Synced {result['synced']} agents to project .cursor/ directory"
+
         if result["errors"]:
             result["status"] = "partial" if result["synced"] > 0 else "error"
 
         return result
 
-    def _generate_cursor_rules(self, name: str, content: str, category: Optional[str] = None) -> str:
-        """Generate .cursorrules content from agent content."""
-        lines = []
-
-        # Add header comment
-        lines.append(f"# {name.replace('-', ' ').replace('_', ' ').title()}")
-        if category:
-            lines.append(f"# Category: {category}")
-        lines.append("# Generated by MyAI")
-        lines.append("")
-
-        # Process content
-        if content:
-            # Clean up content for Cursor rules format
-            cleaned_content = content.strip()
-
-            # If content already looks like rules, use as-is
-            if cleaned_content.startswith("#") or "\n#" in cleaned_content:
-                lines.append(cleaned_content)
-            else:
-                # Format as instructions
-                lines.append("## Instructions")
-                lines.append("")
-                lines.append(cleaned_content)
-        else:
-            lines.append("## Instructions")
-            lines.append("")
-            lines.append("Please follow the guidelines for this project.")
-
-        return "\n".join(lines)
+    def _generate_project_cursor_rules(self, name: str, content: str, category: Optional[str] = None) -> str:
+        _ = name  # Unused in project-level rules
+        _ = category  # Unused in project-level rules
+        """Generate .cursorrules content for project-level integration."""
+        # For project-level rules, we use the raw agent content directly
+        # as Cursor will apply these rules to the project context
+        return content.strip()
 
     async def import_agents(self) -> List[Any]:
         """Import agents from Cursor rules files."""
@@ -494,7 +504,7 @@ class CursorAdapter(AbstractAdapter):
         if not rules_dir.exists():
             return agents
 
-        # Find all rule files
+        # Find all rule files (.cursorrules for project rules)
         for rules_file in rules_dir.glob("*.cursorrules"):
             try:
                 with open(rules_file, encoding="utf-8") as f:

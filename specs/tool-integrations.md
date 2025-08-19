@@ -14,31 +14,31 @@ from pathlib import Path
 
 class ToolAdapter(ABC):
     """Base adapter for AI tool integrations"""
-    
+
     def __init__(self, config: Dict[str, Any]):
         self.config = config
         self.tool_name = self.__class__.__name__.replace('Adapter', '')
-        
+
     @abstractmethod
     def detect_installation(self) -> Optional[Path]:
         """Detect if tool is installed and return config path"""
         pass
-    
+
     @abstractmethod
     def read_config(self) -> Dict[str, Any]:
         """Read tool's current configuration"""
         pass
-    
+
     @abstractmethod
     def write_config(self, config: Dict[str, Any]) -> None:
         """Write configuration to tool"""
         pass
-    
+
     @abstractmethod
     def sync_agents(self, agents: List[Agent]) -> None:
         """Sync agents to tool's format"""
         pass
-    
+
     @abstractmethod
     def validate_integration(self) -> bool:
         """Validate the integration is working"""
@@ -55,13 +55,13 @@ myai_to_claude:
   tools.claude.settings → ~/.claude/settings.json
   tools.claude.permissions → ~/.claude/settings.json#permissions
   tools.claude.allowed_tools → ~/.claude/settings.json#allowedTools
-  
+
   # MCP Servers
   integrations.mcp_servers → ~/.claude/mcp_servers.json
-  
+
   # Agents (via symlinks)
   agents.enabled → ~/.claude/agents/
-  
+
   # Hooks (if configured)
   tools.claude.hooks → ~/.claude/hooks/
 ```
@@ -70,29 +70,29 @@ myai_to_claude:
 ```python
 class ClaudeAdapter(ToolAdapter):
     """Claude Code integration adapter"""
-    
+
     DEFAULT_PATHS = {
         'darwin': Path.home() / '.claude',
         'linux': Path.home() / '.claude',
         'win32': Path.home() / 'AppData' / 'Roaming' / 'Claude'
     }
-    
+
     def detect_installation(self) -> Optional[Path]:
         """Detect Claude Code installation"""
         platform_path = self.DEFAULT_PATHS.get(sys.platform)
         if platform_path and platform_path.exists():
             return platform_path
         return None
-    
+
     def sync_agents(self, agents: List[Agent]) -> None:
         """Sync agents to Claude format"""
         claude_agents_dir = self.claude_path / 'agents'
-        
+
         # Clear existing symlinks
         for item in claude_agents_dir.iterdir():
             if item.is_symlink():
                 item.unlink()
-        
+
         # Create new symlinks
         for agent in agents:
             if agent.enabled:
@@ -168,19 +168,23 @@ myai claude project tools --allow "Task,Read,Edit"
 
 ## Cursor Integration
 
+### Important Note: Project-Level Integration Only
+MyAI's Cursor integration is designed for project-level rules only. This provides better project isolation and allows different projects to have different agent configurations.
+
+- **Project-level rules**: Stored in `.cursor/rules/` directory within each project
+- **Global rules**: NOT supported - each project maintains its own agent rules
+- **Rule format**: `.mdc` files (Markdown with Code) containing agent content with YAML frontmatter
+
 ### Configuration Mapping
 ```yaml
 # MyAI → Cursor mapping
 myai_to_cursor:
-  # Agent rules generation
-  agents.enabled → .cursorrules (generated)
-  
-  # Cursor-specific rules
-  tools.cursor.rules → .cursor/rules/*.md
-  
-  # Settings
+  # Project-level rules only
+  agents.enabled → .cursor/rules/*.mdc
+
+  # Settings (if applicable)
   tools.cursor.settings → .cursor/settings.json
-  
+
   # Project config
   tools.cursor.project → .cursorignore
 ```
@@ -188,46 +192,75 @@ myai_to_cursor:
 ### Cursor Adapter Implementation
 ```python
 class CursorAdapter(ToolAdapter):
-    """Cursor integration adapter"""
-    
-    def sync_agents(self, agents: List[Agent]) -> None:
-        """Convert agents to Cursor rules format"""
-        rules_content = self._generate_cursor_rules(agents)
-        
-        # Write to .cursorrules
-        cursorrules_path = Path.cwd() / '.cursorrules'
-        cursorrules_path.write_text(rules_content)
-        
-        # Also sync to .cursor/rules/ if exists
-        cursor_dir = Path.cwd() / '.cursor'
-        if cursor_dir.exists():
-            rules_dir = cursor_dir / 'rules'
-            rules_dir.mkdir(exist_ok=True)
-            
-            for agent in agents:
-                if agent.enabled:
-                    rule_file = rules_dir / f"{agent.name}.md"
-                    rule_content = self._agent_to_rule(agent)
-                    rule_file.write_text(rule_content)
-    
-    def _agent_to_rule(self, agent: Agent) -> str:
-        """Convert agent spec to Cursor rule format"""
-        return f"""---
-description: {agent.display_name} - {agent.description}
-globs: {', '.join(agent.file_patterns) if agent.file_patterns else '*'}
-alwaysApply: {str(agent.always_apply).lower()}
+    """Cursor integration adapter - project-level only"""
+
+    def sync_agents(self, agents: List[Agent]) -> Dict[str, Any]:
+        """Sync agents to project .cursor directory"""
+        result = {
+            'synced': 0,
+            'errors': [],
+            'message': None
+        }
+
+        # Check if we're in a project context
+        cwd = Path.cwd()
+        if cwd == Path.home():
+            result['status'] = 'error'
+            result['errors'].append('Cannot sync Cursor rules to home directory. Please run from within a project.')
+            return result
+
+        # Create project-level .cursor/rules directory
+        cursor_rules_dir = cwd / '.cursor' / 'rules'
+        cursor_rules_dir.mkdir(parents=True, exist_ok=True)
+
+        for agent in agents:
+            if agent.enabled:
+                # Generate MDC content with frontmatter
+                mdc_content = f"""---
+description: "{agent.display_name} Agent"
+globs:
+  - '**/*'
+alwaysApply: false
 ---
 
 {agent.content}
 """
+                # Write .mdc file
+                rule_file = cursor_rules_dir / f"{agent.name}.mdc"
+                rule_file.write_text(mdc_content)
+                result['synced'] += 1
+
+        if result['synced'] > 0:
+            result['message'] = f"Synced {result['synced']} agents to project .cursor/rules/ directory"
+
+        return result
 ```
 
 ### Cursor Rules Generation
-```markdown
-# Generated .cursorrules example
+```yaml
+# Generated .mdc file example: lead-developer.mdc
+---
+description: "Lead Developer Agent"
+globs:
+  - '**/*'
+alwaysApply: false
+---
 
-## Lead Developer Rules
-You are a senior technical leader with deep expertise in software architecture and team leadership.
+# Lead Developer
+
+## Identity
+- **Name**: Sarah Chen, Engineering Lead
+- **Title**: Lead Developer & Technical Architect
+- **Team**: Engineering
+- **Personality**: Systems thinker, problem solver, mentor
+- **Voice Trigger**: "Hey Lead" or "Consult Architecture"
+
+## Core Competencies
+### Primary Expertise
+- Software architecture and system design
+- Code quality and best practices
+- Team leadership and mentoring
+- Technical debt management
 
 ### Code Review Standards
 - Ensure code follows SOLID principles
@@ -240,44 +273,42 @@ You are a senior technical leader with deep expertise in software architecture a
 - Use dependency injection
 - Keep modules loosely coupled
 - Document architectural decisions
-
-## DevOps Engineer Rules
-You are a DevOps specialist focused on reliability and automation.
-
-### Infrastructure as Code
-- All infrastructure must be version controlled
-- Use declarative configuration
-- Implement proper state management
-- Include rollback procedures
-
-### CI/CD Best Practices
-- Automated testing is mandatory
-- Use blue-green deployments
-- Monitor deployment metrics
-- Implement proper secrets management
 ```
 
 ### Cursor-Specific Features
 
-#### 1. Rules Management
+#### 1. Project-Level Rules Management
 ```bash
-# Generate rules from agents
-myai cursor rules generate
+# Sync agents to current project's .cursor/rules directory
+myai integration sync cursor
 
-# List active rules
-myai cursor rules list
+# List project rules
+ls .cursor/rules/*.mdc
 
-# Test rules
-myai cursor rules test --file example.py
+# Note: Must be run from within a project directory
 ```
 
-#### 2. Project Configuration
-```bash
-# Initialize Cursor for project
-myai cursor init
+#### 2. How It Works
+When syncing to Cursor, MyAI will:
+1. Check that you're in a project directory (not home)
+2. Create `.cursor/rules/` directory in the current project
+3. Write each agent as a `.mdc` file with proper frontmatter
+4. Report success with number of agents synced
 
-# Update .cursorignore
-myai cursor ignore add "*.log" "temp/"
+Example output:
+```
+🔄 Syncing 23 agents...
+✅ Synced 23 agents to project .cursor/rules/ directory
+```
+
+#### 3. Project Configuration
+```bash
+# Each project maintains its own agent configuration
+cd /path/to/project1
+myai integration sync cursor  # Creates project1/.cursor/rules/
+
+cd /path/to/project2
+myai integration sync cursor  # Creates project2/.cursor/rules/
 ```
 
 ## Integration Sync Strategies
@@ -287,12 +318,12 @@ myai cursor ignore add "*.log" "temp/"
 def sync_to_tool(tool: str, components: List[str]) -> None:
     """Sync MyAI config to tool"""
     adapter = get_adapter(tool)
-    
+
     if 'config' in components:
         myai_config = load_myai_config()
         tool_config = transform_config(myai_config, tool)
         adapter.write_config(tool_config)
-    
+
     if 'agents' in components:
         agents = load_enabled_agents()
         adapter.sync_agents(agents)
@@ -303,17 +334,17 @@ def sync_to_tool(tool: str, components: List[str]) -> None:
 def bidirectional_sync(tool: str) -> None:
     """Bidirectional sync with conflict resolution"""
     adapter = get_adapter(tool)
-    
+
     # Read both configs
     myai_config = load_myai_config()
     tool_config = adapter.read_config()
-    
+
     # Detect conflicts
     conflicts = detect_conflicts(myai_config, tool_config)
-    
+
     if conflicts:
         resolution = resolve_conflicts(conflicts)
-        
+
     # Apply changes
     merged_config = merge_configs(myai_config, tool_config, resolution)
     save_myai_config(merged_config)
@@ -324,11 +355,11 @@ def bidirectional_sync(tool: str) -> None:
 ```python
 class SyncWatcher:
     """Watch for changes and auto-sync"""
-    
+
     def __init__(self, tools: List[str]):
         self.tools = tools
         self.observer = Observer()
-        
+
     def start(self):
         # Watch MyAI config directory
         self.observer.schedule(
@@ -336,7 +367,7 @@ class SyncWatcher:
             path='~/.myai',
             recursive=True
         )
-        
+
         # Watch tool directories
         for tool in self.tools:
             adapter = get_adapter(tool)
@@ -368,7 +399,7 @@ class SyncWatcher:
 ```python
 class ConflictResolver:
     """Handle configuration conflicts"""
-    
+
     STRATEGIES = {
         'prefer_myai': lambda m, t: m,
         'prefer_tool': lambda m, t: t,
@@ -384,7 +415,7 @@ class ConflictResolver:
 ```python
 class ToolDetector:
     """Automatically detect installed AI tools"""
-    
+
     KNOWN_TOOLS = {
         'claude': {
             'paths': ['~/.claude', '~/AppData/Roaming/Claude'],
@@ -399,7 +430,7 @@ class ToolDetector:
             'indicators': ['config.json']
         }
     }
-    
+
     def detect_all(self) -> List[str]:
         """Detect all installed tools"""
         detected = []
@@ -418,7 +449,7 @@ class NewToolAdapter(ToolAdapter):
     def detect_installation(self) -> Optional[Path]:
         # Tool-specific detection logic
         pass
-    
+
     # Implement other required methods
 
 # 2. Register adapter
@@ -454,25 +485,25 @@ detection:
 ```python
 class IntegrationTests:
     """Test tool integrations"""
-    
+
     def test_claude_sync(self):
         # Setup
         create_test_agents()
-        
+
         # Sync
         myai.sync('claude', components=['agents'])
-        
+
         # Verify
         assert claude_agents_exist()
         assert symlinks_valid()
-    
+
     def test_cursor_rules_generation(self):
         # Setup
         agents = load_test_agents()
-        
+
         # Generate
         rules = generate_cursor_rules(agents)
-        
+
         # Verify
         assert '.cursorrules' in rules
         assert all(agent.name in rules for agent in agents)

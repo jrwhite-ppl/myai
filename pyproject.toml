@@ -23,7 +23,7 @@ dependencies = [
 ]
 
 [project.scripts]
-myai = "myai.cli:main"
+myai = "myai.app:main"
 
 [project.optional-dependencies]
 test = [

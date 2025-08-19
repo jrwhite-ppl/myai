@@ -146,6 +146,11 @@ def health(
     try:
         manager = IntegrationManager()
 
+        # Initialize integrations first
+        if state.is_debug():
+            console.print("[dim]Initializing integrations...[/dim]")
+        run_async(manager.initialize())
+
         if integration:
             # Check specific integration
             if integration not in manager.list_adapters():
@@ -191,6 +196,11 @@ def sync(
 
     try:
         manager = IntegrationManager()
+
+        # Initialize integrations first
+        if state.is_debug():
+            console.print("[dim]Initializing integrations...[/dim]")
+        run_async(manager.initialize())
 
         if integration:
             # Validate specified integrations
@@ -510,3 +520,8 @@ def _display_sync_results(results: dict, *, dry_run: bool = False):
         console.print(f"\n✅ [green]Total synced: {total_synced}[/green]")
     if total_errors > 0:
         console.print(f"❌ [red]Total errors: {total_errors}[/red]")
+
+    # Show project-level message for Cursor
+    for adapter_name, result in results.items():
+        if adapter_name == "cursor" and "message" in result:
+            console.print(f"\n[cyan]Info: {result['message']}[/cyan]")
