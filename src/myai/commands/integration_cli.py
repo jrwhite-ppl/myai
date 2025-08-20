@@ -2,7 +2,8 @@
 Integration management CLI commands.
 
 This module provides CLI commands for managing tool integrations,
-including sync, health checks, and configuration management.
+including health checks, configuration management, backup, and validation.
+Note: Sync functionality is now automatic when enabling/disabling agents.
 """
 
 import asyncio
@@ -174,65 +175,6 @@ def health(
 
     except Exception as e:
         console.print(f"[red]Error during health check: {e}[/red]")
-        if state.is_debug():
-            raise
-
-
-@app.command()
-def sync(
-    ctx: typer.Context,
-    integration: Optional[List[str]] = typer.Option(
-        None, "--integration", "-i", help="Specific integration(s) to sync"
-    ),
-    dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be synced"),  # noqa: FBT001
-    force: bool = typer.Option(False, "--force", help="Force sync even with warnings"),  # noqa: FBT001
-):
-    """Sync agents to tool integrations."""
-    _ = force  # Mark as intentionally unused for now
-    state: AppState = ctx.obj
-
-    if state.is_debug():
-        console.print(f"[dim]Syncing agents (dry-run: {dry_run})...[/dim]")
-
-    try:
-        manager = IntegrationManager()
-
-        # Initialize integrations first
-        if state.is_debug():
-            console.print("[dim]Initializing integrations...[/dim]")
-        run_async(manager.initialize())
-
-        if integration:
-            # Validate specified integrations
-            active_adapters = manager.list_adapters()
-            invalid_integrations = [i for i in integration if i not in active_adapters]
-
-            if invalid_integrations:
-                console.print(f"[red]Invalid integrations: {', '.join(invalid_integrations)}[/red]")
-                return
-
-        # Get agents to sync
-        from myai.agent.registry import get_agent_registry
-
-        registry = get_agent_registry()
-        agents = registry.list_agents()
-
-        if not agents:
-            console.print("[dim]No agents found to sync[/dim]")
-            return
-
-        console.print(f"🔄 Syncing {len(agents)} agents...")
-        if dry_run:
-            console.print("[yellow]Dry run - no changes will be made[/yellow]")
-
-        # Perform sync
-        results = run_async(manager.sync_agents(agents, integration, dry_run=dry_run))
-
-        # Display results
-        _display_sync_results(results, dry_run=dry_run)
-
-    except Exception as e:
-        console.print(f"[red]Error during sync: {e}[/red]")
         if state.is_debug():
             raise
 
@@ -458,70 +400,3 @@ def _display_health_results(health_info: dict):
             border_style=status_color,
         )
         console.print(panel)
-
-
-def _display_sync_results(results: dict, *, dry_run: bool = False):
-    """Display sync results in a formatted way."""
-    # Create results table
-    table = Table(
-        title=f"🔄 Sync Results{'(Dry Run)' if dry_run else ''}", show_header=True, header_style="bold magenta"
-    )
-    table.add_column("Integration", style="cyan", no_wrap=True)
-    table.add_column("Status", style="white")
-    table.add_column("Synced", style="green")
-    table.add_column("Skipped", style="yellow")
-    table.add_column("Errors", style="red")
-
-    total_synced = 0
-    total_errors = 0
-
-    for adapter_name, result in results.items():
-        status = result.get("status", "unknown")
-        synced = result.get("synced", 0)
-        skipped = result.get("skipped", 0)
-        errors = len(result.get("errors", []))
-
-        total_synced += synced
-        total_errors += errors
-
-        # Status color
-        status_color = {
-            "success": "green",
-            "partial": "yellow",
-            "error": "red",
-        }.get(status, "white")
-
-        table.add_row(
-            adapter_name,
-            f"[{status_color}]{status}[/{status_color}]",
-            str(synced),
-            str(skipped),
-            str(errors),
-        )
-
-    console.print(table)
-
-    # Show error details if any
-    for adapter_name, result in results.items():
-        errors = result.get("errors", [])
-        warnings = result.get("warnings", [])
-
-        if errors or warnings:
-            console.print(f"\n[bold]{adapter_name} Details:[/bold]")
-
-            for error in errors:
-                console.print(f"  [red]Error:[/red] {error}")
-
-            for warning in warnings:
-                console.print(f"  [yellow]Warning:[/yellow] {warning}")
-
-    # Summary
-    if total_synced > 0:
-        console.print(f"\n✅ [green]Total synced: {total_synced}[/green]")
-    if total_errors > 0:
-        console.print(f"❌ [red]Total errors: {total_errors}[/red]")
-
-    # Show project-level message for Cursor
-    for adapter_name, result in results.items():
-        if adapter_name == "cursor" and "message" in result:
-            console.print(f"\n[cyan]Info: {result['message']}[/cyan]")

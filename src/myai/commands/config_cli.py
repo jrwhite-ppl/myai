@@ -5,10 +5,11 @@ This module provides CLI commands for managing MyAI configurations,
 including reading, writing, and validating configuration files.
 """
 
-from typing import Optional
+from typing import Any, Dict, Optional
 
 import typer
 from rich.console import Console
+from rich.table import Table
 
 from myai.cli.formatters import get_formatter
 from myai.cli.state import AppState
@@ -17,6 +18,9 @@ from myai.config.manager import get_config_manager
 # Create config command group
 app = typer.Typer(help="📝 Configuration management commands")
 console = Console()
+
+# Constants
+MAX_LIST_DISPLAY = 3
 
 
 @app.command()
@@ -168,87 +172,166 @@ def reset(
 
 
 @app.command()
-def agents(
+def diff(
     ctx: typer.Context,
-    action: str = typer.Argument(None, help="Action: enable, disable, list"),
-    names: Optional[list[str]] = typer.Argument(None, help="Agent names for enable/disable"),
+    source: str = typer.Argument("user", help="Source configuration level (user, project, default)"),
+    target: str = typer.Argument("project", help="Target configuration level to compare against"),
+    key: Optional[str] = typer.Option(None, "--key", "-k", help="Specific configuration key to compare"),
+    show_identical: bool = typer.Option(False, "--show-identical", help="Show identical values"),  # noqa: FBT001
 ):
-    """Manage agent configuration (enable/disable agents)."""
+    """Compare configurations between different levels."""
     state: AppState = ctx.obj
+
+    if state.is_debug():
+        console.print(f"[dim]Comparing {source} vs {target} configuration...[/dim]")
 
     try:
         config_manager = get_config_manager()
-        config = config_manager.get_config()
 
-        if not action or action == "list":
-            # Show current agent configuration
-            console.print("\n[bold]Agent Configuration:[/bold]")
+        # Get configurations
+        if source == "default":
+            # Get empty config to compare against (acts as default)
+            from myai.models.config import MyAIConfig
 
-            if config.agents.enabled:
-                console.print("\n[green]Explicitly Enabled:[/green]")
-                for name in sorted(config.agents.enabled):
-                    console.print(f"  ✅ {name}")
-            else:
-                console.print("\n[dim]No explicitly enabled agents[/dim]")
-
-            if config.agents.disabled:
-                console.print("\n[red]Explicitly Disabled:[/red]")
-                for name in sorted(config.agents.disabled):
-                    console.print(f"  ❌ {name}")
-            else:
-                console.print("[dim]No explicitly disabled agents[/dim]")
-
-            console.print(f"\n[dim]Auto-discover: {config.agents.auto_discover}[/dim]")
-            if config.agents.custom_path:
-                console.print(f"[dim]Custom path: {config.agents.custom_path}[/dim]")
-
-        elif action == "enable":
-            if not names:
-                console.print("[red]Error: No agent names provided[/red]")
-                return
-
-            enabled_count = 0
-            for name in names:
-                # Remove from disabled list if present
-                if name in config.agents.disabled:
-                    config.agents.disabled.remove(name)
-
-                # Add to enabled list if not already there
-                if name not in config.agents.enabled:
-                    config.agents.enabled.append(name)
-                    enabled_count += 1
-
-            # Save config
-            config_manager.set_config_value("agents.enabled", config.agents.enabled)
-            config_manager.set_config_value("agents.disabled", config.agents.disabled)
-            console.print(f"✅ Enabled {enabled_count} agent(s)")
-
-        elif action == "disable":
-            if not names:
-                console.print("[red]Error: No agent names provided[/red]")
-                return
-
-            disabled_count = 0
-            for name in names:
-                # Remove from enabled list if present
-                if name in config.agents.enabled:
-                    config.agents.enabled.remove(name)
-
-                # Add to disabled list if not already there
-                if name not in config.agents.disabled:
-                    config.agents.disabled.append(name)
-                    disabled_count += 1
-
-            # Save config
-            config_manager.set_config_value("agents.enabled", config.agents.enabled)
-            config_manager.set_config_value("agents.disabled", config.agents.disabled)
-            console.print(f"✅ Disabled {disabled_count} agent(s)")
-
+            source_config = MyAIConfig()
         else:
-            console.print(f"[red]Unknown action: {action}[/red]")
-            console.print("Valid actions: list, enable, disable")
+            source_config = config_manager.get_config([source])
+
+        if target == "default":
+            # Get empty config to compare against (acts as default)
+            from myai.models.config import MyAIConfig
+
+            target_config = MyAIConfig()
+        else:
+            target_config = config_manager.get_config([target])
+
+        # Convert to dictionaries
+        source_dict: Dict[str, Any] = source_config.model_dump() if hasattr(source_config, "model_dump") else {}
+        target_dict: Dict[str, Any] = target_config.model_dump() if hasattr(target_config, "model_dump") else {}
+
+        # If specific key requested, extract just that part
+        if key:
+            source_val = _get_nested_value(source_dict, key)
+            target_val = _get_nested_value(target_dict, key)
+
+            if source_val is None or target_val is None:
+                console.print(f"[red]Key '{key}' not found in one or both configurations[/red]")
+                return
+
+            # Create new dicts with just the requested key for comparison
+            source_dict = {key: source_val}
+            target_dict = {key: target_val}
+
+        # Compare configurations
+        differences = _compare_dicts(source_dict, target_dict)
+
+        if not differences and not show_identical:
+            console.print(f"[green]✅ No differences found between {source} and {target} configurations[/green]")
+            return
+
+        # Display differences
+        table = Table(
+            title=f"Configuration Comparison: {source} vs {target}", show_header=True, header_style="bold magenta"
+        )
+        table.add_column("Key", style="cyan", no_wrap=True)
+        table.add_column(f"{source.capitalize()}", style="yellow")
+        table.add_column(f"{target.capitalize()}", style="green")
+        table.add_column("Status", style="white")
+
+        # Add rows for differences
+        for diff_key, (source_val, target_val, status) in sorted(differences.items()):
+            if status != "identical" or show_identical:
+                status_display = {
+                    "different": "≠ Different",
+                    "added": "+ Added",
+                    "removed": "- Removed",
+                    "identical": "= Same",
+                }.get(status, status)
+
+                # Format values for display
+                source_str = _format_value(source_val) if source_val is not None else "[dim]not set[/dim]"
+                target_str = _format_value(target_val) if target_val is not None else "[dim]not set[/dim]"
+
+                # Apply styling based on status
+                if status == "removed":
+                    source_str = f"[red]{source_str}[/red]"
+                elif status == "added":
+                    target_str = f"[green]{target_str}[/green]"
+
+                table.add_row(diff_key, source_str, target_str, status_display)
+
+        console.print(table)
+
+        # Summary
+        diff_count = sum(1 for _, (_, _, status) in differences.items() if status != "identical")
+        if diff_count > 0:
+            console.print(f"\n[yellow]Found {diff_count} differences[/yellow]")
 
     except Exception as e:
-        console.print(f"[red]Error managing agent configuration: {e}[/red]")
+        console.print(f"[red]Error comparing configurations: {e}[/red]")
         if state.is_debug():
             raise
+
+
+def _get_nested_value(data: dict, key: str):
+    """Get a nested value from a dictionary using dot notation."""
+    keys = key.split(".")
+    value = data
+
+    for k in keys:
+        if isinstance(value, dict) and k in value:
+            value = value[k]
+        else:
+            return None
+
+    return value
+
+
+def _compare_dicts(source: dict, target: dict, prefix: str = "") -> dict:
+    """Compare two dictionaries and return differences."""
+    differences = {}
+
+    # Get all keys from both dicts
+    all_keys = set(source.keys()) | set(target.keys())
+
+    for key in all_keys:
+        full_key = f"{prefix}.{key}" if prefix else key
+        source_val = source.get(key)
+        target_val = target.get(key)
+
+        if key not in source:
+            differences[full_key] = (None, target_val, "added")
+        elif key not in target:
+            differences[full_key] = (source_val, None, "removed")
+        elif isinstance(source_val, dict) and isinstance(target_val, dict):
+            # Recursively compare nested dicts
+            nested_diffs = _compare_dicts(source_val, target_val, full_key)
+            differences.update(nested_diffs)
+        elif source_val != target_val:
+            differences[full_key] = (source_val, target_val, "different")
+        else:
+            differences[full_key] = (source_val, target_val, "identical")
+
+    return differences
+
+
+def _format_value(value) -> str:
+    """Format a value for display."""
+    if isinstance(value, (list, tuple)):
+        if len(value) == 0:
+            return "[]"
+        elif len(value) <= MAX_LIST_DISPLAY:
+            return f"[{', '.join(str(v) for v in value)}]"
+        else:
+            return f"[{', '.join(str(v) for v in value[:MAX_LIST_DISPLAY])}, ... ({len(value)} items)]"
+    elif isinstance(value, dict):
+        if len(value) == 0:
+            return "{}"
+        else:
+            return f"{{...}} ({len(value)} keys)"
+    elif isinstance(value, bool):
+        return str(value).lower()
+    elif value is None:
+        return "null"
+    else:
+        return str(value)

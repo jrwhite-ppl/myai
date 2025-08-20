@@ -88,25 +88,131 @@ def version(
 
 @app.command()
 def status(ctx: typer.Context):
-    """Show system status and health check."""
+    """Show comprehensive system status and overview."""
+    import platform
+    import sys
+
+    from myai.agent.registry import get_agent_registry
+    from myai.cli.formatters import get_formatter
+    from myai.config.manager import get_config_manager
+
     state: AppState = ctx.obj
 
     if state.debug:
         console.print("[dim]Running status check...[/dim]")
 
-    # Create status table
-    table = Table(title="🔍 MyAI System Status", show_header=True, header_style="bold magenta")
-    table.add_column("Component", style="cyan", no_wrap=True)
-    table.add_column("Status", justify="center")
-    table.add_column("Details", style="dim")
+    try:
+        # Gather system information
+        registry = get_agent_registry()
+        config_manager = get_config_manager()
+        agents = registry.list_agents()
 
-    # Add status rows (placeholder for now)
-    table.add_row("Configuration", "✅ OK", "Config loaded successfully")
-    table.add_row("Agent Registry", "✅ OK", "Registry initialized")
-    table.add_row("Storage", "✅ OK", "File system accessible")
-    table.add_row("Templates", "✅ OK", "4 default templates loaded")
+        # Count enabled agents across all scopes
+        config = config_manager.get_config()
+        enabled_agents = []
+        global_enabled = getattr(config.agents, "global_enabled", [])
+        project_enabled = config.agents.enabled
 
-    console.print(table)
+        for agent in agents:
+            if agent.metadata.name in global_enabled or agent.metadata.name in project_enabled:
+                enabled_agents.append(agent)
+
+        if state.output_format == "json":
+            formatter = get_formatter("json", console)
+            system_data = {
+                "system": {
+                    "platform": platform.system(),
+                    "python_version": sys.version.split()[0],
+                    "myai_path": str(Path.home() / ".myai"),
+                },
+                "agents": {
+                    "total": len(agents),
+                    "global_enabled": len(global_enabled),
+                    "project_enabled": len(project_enabled),
+                    "categories": len({a.metadata.category.value for a in agents if hasattr(a.metadata, "category")}),
+                },
+                "configuration": {
+                    "user_config": str(config_manager.get_config_path("user") or "Not set"),
+                    "project_config": str(config_manager.get_config_path("project") or "Not set"),
+                },
+                "integrations": {
+                    "claude": (Path.home() / ".claude" / "agents").exists(),
+                    "cursor": (Path.cwd() / ".cursor" / "rules").exists(),
+                },
+            }
+            formatter.format(system_data)
+        else:
+            # Create comprehensive status display
+            console.print("[bold cyan]🔍 MyAI System Status[/bold cyan]\n")
+
+            # System info table
+            system_table = Table(title="System Information", show_header=False)
+            system_table.add_column("Property", style="cyan")
+            system_table.add_column("Value", style="white")
+
+            system_table.add_row("Platform", platform.system())
+            system_table.add_row("Python Version", sys.version.split()[0])
+            system_table.add_row("MyAI Path", str(Path.home() / ".myai"))
+            system_table.add_row("Current Directory", str(Path.cwd()))
+
+            console.print(system_table)
+            console.print()
+
+            # Agent statistics table
+            agent_table = Table(title="Agent Statistics", show_header=False)
+            agent_table.add_column("Metric", style="cyan")
+            agent_table.add_column("Count", style="white")
+
+            agent_table.add_row("Total Agents", str(len(agents)))
+            agent_table.add_row("Globally Enabled", str(len(global_enabled)))
+            agent_table.add_row("Project Enabled", str(len(project_enabled)))
+            agent_table.add_row(
+                "Categories", str(len({a.metadata.category.value for a in agents if hasattr(a.metadata, "category")}))
+            )
+
+            console.print(agent_table)
+            console.print()
+
+            # Configuration & Integration status
+            status_table = Table(title="Configuration & Integrations", show_header=True, header_style="bold magenta")
+            status_table.add_column("Component", style="cyan", no_wrap=True)
+            status_table.add_column("Status", justify="center")
+            status_table.add_column("Details", style="dim")
+
+            # Configuration status
+            user_config_path = config_manager.get_config_path("user")
+            if user_config_path and user_config_path.exists():
+                status_table.add_row("User Config", "✅ OK", str(user_config_path))
+            else:
+                status_table.add_row("User Config", "⚠️  Not Set", "Using defaults")
+
+            project_config_path = config_manager.get_config_path("project")
+            if project_config_path and project_config_path.exists():
+                status_table.add_row("Project Config", "✅ OK", str(project_config_path))
+            else:
+                status_table.add_row("Project Config", "⚠️  Not Set", "No project config")
+
+            # Integration status
+            claude_path = Path.home() / ".claude" / "agents"
+            if claude_path.exists():
+                claude_count = len(list(claude_path.glob("*.md")))
+                status_table.add_row("Claude Integration", "✅ OK", f"{claude_count} agents synced")
+            else:
+                status_table.add_row("Claude Integration", "❌ Not Setup", "Run 'myai setup all-setup'")
+
+            cursor_path = Path.cwd() / ".cursor" / "rules"
+            if cursor_path.exists():
+                cursor_count = len(list(cursor_path.glob("*.mdc")))
+                status_table.add_row("Cursor Integration", "✅ OK", f"{cursor_count} rules active")
+            else:
+                status_table.add_row("Cursor Integration", "❌ Not Setup", "Run 'myai setup all-setup'")
+
+            console.print(status_table)
+
+    except Exception as e:
+        console.print(f"[red]Error getting system status: {e}[/red]")
+        if state.is_debug():
+            raise
 
 
 def main():
