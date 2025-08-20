@@ -113,6 +113,8 @@ class AgentConfig(BaseModel):
 
     enabled: List[str] = Field(default_factory=list)
     disabled: List[str] = Field(default_factory=list)
+    global_enabled: List[str] = Field(default_factory=list)
+    global_disabled: List[str] = Field(default_factory=list)
     custom_path: Optional[Path] = None
     auto_discover: bool = True
     categories: List[str] = Field(default_factory=list)

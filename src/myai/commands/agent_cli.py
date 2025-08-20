@@ -5,6 +5,7 @@ This module provides CLI commands for managing AI agents,
 including listing, creating, editing, and managing agents.
 """
 
+from pathlib import Path
 from typing import Optional
 
 import typer
@@ -19,6 +20,7 @@ from myai.agent.templates import get_template_registry
 from myai.agent.validator import AgentValidator
 from myai.cli.formatters import get_formatter
 from myai.cli.state import AppState
+from myai.config.manager import get_config_manager
 from myai.models.agent import AgentCategory
 
 # Constants
@@ -26,6 +28,85 @@ MAX_DESCRIPTION_LENGTH = 50
 
 # Create agent command group
 app = typer.Typer(help="🤖 Agent management commands")
+
+
+def _create_agent_files(agent, *, global_scope=False):
+    """Create integration files for an enabled agent.
+
+    Args:
+        agent: Agent object to create files for
+        global_scope: If True, create global files. If False, create project-level files.
+    """
+    agent_name = agent.metadata.name
+
+    if global_scope:
+        # Create global Claude file
+        claude_dir = Path.home() / ".claude" / "agents"
+        claude_dir.mkdir(parents=True, exist_ok=True)
+        claude_file = claude_dir / f"{agent_name}.md"
+        if not claude_file.exists():
+            claude_file.write_text(agent.content)
+    else:
+        # Create project Claude file (lightweight wrapper)
+        project_claude_dir = Path.cwd() / ".claude" / "agents"
+        project_claude_dir.mkdir(parents=True, exist_ok=True)
+        project_claude_file = project_claude_dir / f"{agent_name}.md"
+        if not project_claude_file.exists():
+            wrapper_content = f"""---
+agent: "{agent_name}"
+source: "~/.myai/agents"
+---
+
+# {agent.metadata.display_name}
+
+@myai/agents/{agent.metadata.category.value if agent.metadata.category else 'default'}/{agent_name}.md
+"""
+            project_claude_file.write_text(wrapper_content)
+
+        # Create project Cursor file
+        project_cursor_dir = Path.cwd() / ".cursor" / "rules"
+        project_cursor_dir.mkdir(parents=True, exist_ok=True)
+        cursor_file = project_cursor_dir / f"{agent_name}.mdc"
+        if not cursor_file.exists():
+            mdc_content = f"""---
+description: "Cursor rules for {agent.metadata.display_name}"
+globs:
+alwaysApply: false
+version: 1.0
+encoding: UTF-8
+---
+
+# {agent.metadata.display_name}
+
+@myai/agents/{agent.metadata.category.value if agent.metadata.category else 'default'}/{agent_name}.md
+"""
+            cursor_file.write_text(mdc_content)
+
+
+def _remove_agent_files(agent_name, *, global_scope=False):
+    """Remove integration files for a disabled agent.
+
+    Args:
+        agent_name: Name of agent to remove files for
+        global_scope: If True, remove global files. If False, remove project-level files.
+    """
+    if global_scope:
+        # Remove global Claude file
+        claude_file = Path.home() / ".claude" / "agents" / f"{agent_name}.md"
+        if claude_file.exists():
+            claude_file.unlink()
+    else:
+        # Remove project Claude file
+        project_claude_file = Path.cwd() / ".claude" / "agents" / f"{agent_name}.md"
+        if project_claude_file.exists():
+            project_claude_file.unlink()
+
+        # Remove project Cursor file
+        cursor_file = Path.cwd() / ".cursor" / "rules" / f"{agent_name}.mdc"
+        if cursor_file.exists():
+            cursor_file.unlink()
+
+
 console = Console()
 
 
@@ -36,6 +117,7 @@ def list_agents(
     tool: Optional[str] = typer.Option(None, "--tool", "-t", help="Filter by tool"),
     tag: Optional[str] = typer.Option(None, "--tag", help="Filter by tag"),
     enabled_only: bool = typer.Option(False, "--enabled", help="Show only enabled agents"),  # noqa: FBT001
+    all_agents: bool = typer.Option(False, "--all", help="Show all agents including disabled"),  # noqa: FBT001
 ):
     """List available agents."""
     state: AppState = ctx.obj
@@ -45,9 +127,29 @@ def list_agents(
 
     try:
         registry = get_agent_registry()
-        agents = registry.list_agents(
-            category=category.value if category else None, tool=tool, tag=tag, enabled_only=enabled_only
-        )
+        config_manager = get_config_manager()
+        config = config_manager.get_config()
+
+        # Get enabled/disabled lists from config
+        enabled_list = config.agents.enabled
+        disabled_list = config.agents.disabled
+        global_enabled_list = getattr(config.agents, "global_enabled", [])
+        global_disabled_list = getattr(config.agents, "global_disabled", [])
+
+        agents = registry.list_agents(category=category.value if category else None, tool=tool, tag=tag)
+
+        # Filter based on enabled/disabled status
+        if not all_agents:
+            # By default, show all agents except explicitly disabled ones (global or project)
+            agents = [
+                a
+                for a in agents
+                if a.metadata.name not in disabled_list and a.metadata.name not in global_disabled_list
+            ]
+
+        if enabled_only:
+            # Show only explicitly enabled agents (global or project)
+            agents = [a for a in agents if a.metadata.name in enabled_list or a.metadata.name in global_enabled_list]
 
         if not agents:
             console.print("[dim]No agents found[/dim]")
@@ -74,14 +176,40 @@ def list_agents(
             table.add_column("Display Name", style="white")
             table.add_column("Category", style="green")
             table.add_column("Tools", style="yellow")
+            table.add_column("Status", style="blue")
             table.add_column("Version", style="dim")
 
             for agent in agents:
+                # Determine status - show both global and project status
+                global_status = ""
+                project_status = ""
+
+                if agent.metadata.name in global_disabled_list:
+                    global_status = "[red]Global: Disabled[/red]"
+                elif agent.metadata.name in global_enabled_list:
+                    global_status = "[green]Global: Enabled[/green]"
+
+                if agent.metadata.name in disabled_list:
+                    project_status = "[red]Project: Disabled[/red]"
+                elif agent.metadata.name in enabled_list:
+                    project_status = "[green]Project: Enabled[/green]"
+
+                # Combine statuses
+                if global_status and project_status:
+                    status = f"{global_status}, {project_status}"
+                elif global_status:
+                    status = global_status
+                elif project_status:
+                    status = project_status
+                else:
+                    status = "[dim]Default[/dim]"
+
                 table.add_row(
                     agent.metadata.name,
                     agent.metadata.display_name,
                     agent.metadata.category.value,
                     ", ".join(agent.metadata.tools[:3]),  # Show first 3 tools
+                    status,
                     agent.metadata.version,
                 )
 
@@ -157,6 +285,162 @@ def show(
 
 
 @app.command()
+def enable(
+    ctx: typer.Context,
+    names: list[str] = typer.Argument(..., help="Agent name(s) to enable"),
+    global_scope: bool = typer.Option(  # noqa: FBT001
+        False, "--global", help="Enable agent(s) globally instead of project-level"
+    ),
+):
+    """Enable one or more agents."""
+    state: AppState = ctx.obj
+
+    try:
+        config_manager = get_config_manager()
+        config = config_manager.get_config()
+        registry = get_agent_registry()
+
+        enabled_count = 0
+        not_found = []
+        enabled_agents = []
+
+        for name in names:
+            # Check if agent exists
+            agent = registry.get_agent(name)
+            if not agent:
+                not_found.append(name)
+                continue
+
+            if global_scope:
+                # Handle global enablement
+                if name in config.agents.global_disabled:
+                    config.agents.global_disabled.remove(name)
+                if name not in config.agents.global_enabled:
+                    config.agents.global_enabled.append(name)
+                    enabled_agents.append(agent)
+                    enabled_count += 1
+                else:
+                    console.print(f"[yellow]Agent '{name}' is already enabled globally[/yellow]")
+            else:
+                # Handle project-level enablement
+                if name in config.agents.disabled:
+                    config.agents.disabled.remove(name)
+                if name not in config.agents.enabled:
+                    config.agents.enabled.append(name)
+                    enabled_agents.append(agent)
+                    enabled_count += 1
+                else:
+                    console.print(f"[yellow]Agent '{name}' is already enabled for this project[/yellow]")
+
+        if enabled_count > 0:
+            # Save config based on scope
+            if global_scope:
+                config_manager.set_config_value("agents.global_enabled", getattr(config.agents, "global_enabled", []))
+                config_manager.set_config_value("agents.global_disabled", getattr(config.agents, "global_disabled", []))
+                scope_text = "globally"
+            else:
+                config_manager.set_config_value("agents.enabled", config.agents.enabled)
+                config_manager.set_config_value("agents.disabled", config.agents.disabled)
+                scope_text = "for this project"
+
+            # Create integration files for newly enabled agents
+            for agent in enabled_agents:
+                try:
+                    _create_agent_files(agent, global_scope=global_scope)
+                except Exception as e:
+                    console.print(f"[yellow]Warning: Failed to create files for {agent.metadata.name}: {e}[/yellow]")
+
+            console.print(f"✅ Enabled {enabled_count} agent(s) {scope_text} and created integration files")
+
+        if not_found:
+            console.print(f"[red]❌ Agent(s) not found: {', '.join(not_found)}[/red]")
+
+    except Exception as e:
+        console.print(f"[red]Error enabling agents: {e}[/red]")
+        if state.is_debug():
+            raise
+
+
+@app.command()
+def disable(
+    ctx: typer.Context,
+    names: list[str] = typer.Argument(..., help="Agent name(s) to disable"),
+    global_scope: bool = typer.Option(  # noqa: FBT001
+        False, "--global", help="Disable agent(s) globally instead of project-level"
+    ),
+):
+    """Disable one or more agents."""
+    state: AppState = ctx.obj
+
+    try:
+        config_manager = get_config_manager()
+        config = config_manager.get_config()
+        registry = get_agent_registry()
+
+        disabled_count = 0
+        not_found = []
+        disabled_agents = []
+
+        for name in names:
+            # Check if agent exists
+            agent = registry.get_agent(name)
+            if not agent:
+                not_found.append(name)
+                continue
+
+            if global_scope:
+                # Handle global disabling
+                if name in getattr(config.agents, "global_enabled", []):
+                    config.agents.global_enabled.remove(name)
+                if name not in getattr(config.agents, "global_disabled", []):
+                    if not hasattr(config.agents, "global_disabled"):
+                        config.agents.global_disabled = []
+                    config.agents.global_disabled.append(name)
+                    disabled_agents.append(name)
+                    disabled_count += 1
+                else:
+                    console.print(f"[yellow]Agent '{name}' is already disabled globally[/yellow]")
+            else:
+                # Handle project-level disabling
+                if name in config.agents.enabled:
+                    config.agents.enabled.remove(name)
+                if name not in config.agents.disabled:
+                    config.agents.disabled.append(name)
+                    disabled_agents.append(name)
+                    disabled_count += 1
+                else:
+                    console.print(f"[yellow]Agent '{name}' is already disabled for this project[/yellow]")
+
+        if disabled_count > 0:
+            # Save config based on scope
+            if global_scope:
+                config_manager.set_config_value("agents.global_enabled", getattr(config.agents, "global_enabled", []))
+                config_manager.set_config_value("agents.global_disabled", getattr(config.agents, "global_disabled", []))
+                scope_text = "globally"
+            else:
+                config_manager.set_config_value("agents.enabled", config.agents.enabled)
+                config_manager.set_config_value("agents.disabled", config.agents.disabled)
+                scope_text = "for this project"
+
+            # Remove integration files for newly disabled agents
+            for agent_name in disabled_agents:
+                try:
+                    _remove_agent_files(agent_name, global_scope=global_scope)
+                except Exception as e:
+                    console.print(f"[yellow]Warning: Failed to remove files for {agent_name}: {e}[/yellow]")
+
+            console.print(f"✅ Disabled {disabled_count} agent(s) {scope_text} and removed integration files")
+
+        if not_found:
+            console.print(f"[red]❌ Agent(s) not found: {', '.join(not_found)}[/red]")
+
+    except Exception as e:
+        console.print(f"[red]Error disabling agents: {e}[/red]")
+        if state.is_debug():
+            raise
+
+
+@app.command()
 def create(
     ctx: typer.Context,
     name: str = typer.Argument(..., help="Agent name"),
@@ -220,6 +504,43 @@ def create(
 
 
 @app.command()
+def edit(
+    ctx: typer.Context,
+    name: str = typer.Argument(..., help="Agent name to edit"),
+):
+    """Edit an agent's content file."""
+    state: AppState = ctx.obj
+
+    try:
+        registry = get_agent_registry()
+        agent = registry.get_agent(name)
+
+        if not agent:
+            console.print(f"[red]Agent '{name}' not found[/red]")
+            return
+
+        # For now, show the agent content instead of editing
+        # TODO: Add proper API to get agent file paths from registry
+        console.print(f"[yellow]Direct file editing not yet implemented for agent '{name}'[/yellow]")
+        console.print("[dim]Showing agent content instead:[/dim]\n")
+
+        # Show agent content
+        content_panel = Panel(
+            agent.content,
+            title=f"📝 Agent: {agent.metadata.display_name}",
+            border_style="green",
+        )
+        console.print(content_panel)
+
+        console.print("\n[dim]To edit this agent, modify the source file directly.[/dim]")
+
+    except Exception as e:
+        console.print(f"[red]Error editing agent: {e}[/red]")
+        if state.is_debug():
+            raise
+
+
+@app.command()
 def validate(
     ctx: typer.Context,
     name: Optional[str] = typer.Argument(None, help="Agent name to validate (or all if not specified)"),
@@ -263,64 +584,6 @@ def validate(
 
     except Exception as e:
         console.print(f"[red]Error validating agents: {e}[/red]")
-        if state.is_debug():
-            raise
-
-
-@app.command()
-def sync(
-    ctx: typer.Context,
-    dry_run: bool = typer.Option(  # noqa: FBT001
-        False, "--dry-run", help="Show what would be synced without making changes"
-    ),
-    _source: Optional[str] = typer.Option(None, "--source", help="Source directory to sync from"),
-    _target: Optional[str] = typer.Option(None, "--target", help="Target directory to sync to"),
-    force: bool = typer.Option(False, "--force", help="Force sync even with conflicts"),  # noqa: FBT001
-):
-    """Synchronize agents between directories."""
-    state: AppState = ctx.obj
-
-    if state.is_debug():
-        console.print(f"[dim]Syncing agents (dry-run: {dry_run})...[/dim]")
-
-    try:
-        registry = get_agent_registry()
-
-        # Get all agents from registry
-        agents = registry.list_agents()
-
-        if not agents:
-            console.print("[dim]No agents found to sync[/dim]")
-            return
-
-        # For now, implement basic sync functionality
-        # TODO: Implement full directory-to-directory sync
-        changes_detected = 0
-        conflicts_detected = 0
-
-        for agent in agents:
-            # Simulate sync check
-            if state.is_debug():
-                console.print(f"[dim]Checking {agent.metadata.name}...[/dim]")
-
-            # For now, just count as "checked"
-            changes_detected += 1
-
-        if dry_run:
-            console.print("[yellow]Dry run completed:[/yellow]")
-            console.print(f"  • {len(agents)} agents checked")
-            console.print(f"  • {changes_detected} would be updated")
-            console.print(f"  • {conflicts_detected} conflicts detected")
-        else:
-            console.print("✅ Sync completed:")
-            console.print(f"  • {len(agents)} agents processed")
-            console.print(f"  • {changes_detected} agents up to date")
-
-        if conflicts_detected > 0 and not force:
-            console.print(f"[red]⚠️  {conflicts_detected} conflicts found. Use --force to override.[/red]")
-
-    except Exception as e:
-        console.print(f"[red]Error syncing agents: {e}[/red]")
         if state.is_debug():
             raise
 
@@ -391,124 +654,60 @@ def diff(
 
 
 @app.command()
-def backup(
-    ctx: typer.Context,
-    name: Optional[str] = typer.Argument(None, help="Agent name to backup (or all if not specified)"),
-    _backup_dir: Optional[str] = typer.Option(None, "--backup-dir", help="Custom backup directory"),
-):
-    """Create backup of agents."""
+def status(ctx: typer.Context):
+    """Show agent enabled/disabled status."""
     state: AppState = ctx.obj
 
     try:
         registry = get_agent_registry()
+        config_manager = get_config_manager()
+        config = config_manager.get_config()
 
-        if name:
-            # Backup specific agent
-            agent = registry.get_agent(name)
-            if not agent:
-                console.print(f"[red]Agent '{name}' not found[/red]")
-                return
+        enabled_list = config.agents.enabled
+        disabled_list = config.agents.disabled
 
-            # For now, just confirm the agent exists
-            console.print(f"✅ Agent '{name}' backed up successfully")
-        else:
-            # Backup all agents
-            agents = registry.list_agents()
-            if not agents:
-                console.print("[dim]No agents found to backup[/dim]")
-                return
+        # Get all agents
+        agents = registry.list_agents()
 
-            console.print(f"✅ Backed up {len(agents)} agents successfully")
+        # Categorize agents
+        explicitly_enabled = []
+        explicitly_disabled = []
+        default_enabled = []
 
-    except Exception as e:
-        console.print(f"[red]Error creating backup: {e}[/red]")
-        if state.is_debug():
-            raise
+        for agent in agents:
+            if agent.metadata.name in disabled_list:
+                explicitly_disabled.append(agent)
+            elif agent.metadata.name in enabled_list:
+                explicitly_enabled.append(agent)
+            else:
+                default_enabled.append(agent)
 
+        # Display status
+        console.print("\n[bold]Agent Status Summary:[/bold]")
+        console.print(f"  • Total agents: {len(agents)}")
+        console.print(f"  • Explicitly enabled: {len(explicitly_enabled)}")
+        console.print(f"  • Explicitly disabled: {len(explicitly_disabled)}")
+        console.print(f"  • Default (enabled): {len(default_enabled)}")
 
-@app.command()
-def restore(
-    ctx: typer.Context,
-    name: str = typer.Argument(..., help="Agent name to restore"),
-    backup_id: Optional[str] = typer.Option(None, "--backup-id", help="Specific backup ID to restore"),
-):
-    """Restore agent from backup."""
-    state: AppState = ctx.obj
+        if explicitly_enabled:
+            console.print("\n[green]Explicitly Enabled:[/green]")
+            for agent in sorted(explicitly_enabled, key=lambda a: a.metadata.name):
+                console.print(f"  ✅ {agent.metadata.name} - {agent.metadata.display_name}")
 
-    try:
-        registry = get_agent_registry()
+        if explicitly_disabled:
+            console.print("\n[red]Explicitly Disabled:[/red]")
+            for agent in sorted(explicitly_disabled, key=lambda a: a.metadata.name):
+                console.print(f"  ❌ {agent.metadata.name} - {agent.metadata.display_name}")
 
-        # For now, just simulate restore
-        agent = registry.get_agent(name)
-        if not agent:
-            console.print(f"[red]Agent '{name}' not found[/red]")
-            return
-
-        console.print(f"✅ Agent '{name}' restored successfully")
-        if backup_id:
-            console.print(f"   From backup: {backup_id}")
-
-    except Exception as e:
-        console.print(f"[red]Error restoring agent: {e}[/red]")
-        if state.is_debug():
-            raise
-
-
-@app.command()
-def migrate(
-    ctx: typer.Context,
-    source: str = typer.Option("auto", "--source", help="Migration source (auto, claude, cursor, agent-os)"),
-    backup_first: bool = typer.Option(  # noqa: FBT001
-        True, "--backup/--no-backup", help="Create backup before migration"
-    ),
-    dry_run: bool = typer.Option(  # noqa: FBT001
-        False, "--dry-run", help="Show what would be migrated without making changes"
-    ),
-):
-    """Migrate agents from other tools or formats."""
-    state: AppState = ctx.obj
-
-    if state.is_debug():
-        console.print(f"[dim]Migrating from {source} (dry-run: {dry_run})...[/dim]")
-
-    try:
-        # Simulate migration detection
-        migration_sources = []
-
-        if source == "auto":
-            # Auto-detect migration sources
-            console.print("[dim]Detecting migration sources...[/dim]")
-            migration_sources = ["claude", "cursor"]  # Simulated detection
-        else:
-            migration_sources = [source]
-
-        if not migration_sources:
-            console.print("[dim]No migration sources detected[/dim]")
-            return
-
-        total_agents = 0
-        for migration_source in migration_sources:
-            # Simulate finding agents to migrate
-            found_agents = 3 if migration_source == "claude" else 2  # Simulated
-            total_agents += found_agents
-            console.print(f"  • Found {found_agents} agents from {migration_source}")
-
-        if dry_run:
-            console.print("\n[yellow]Dry run completed:[/yellow]")
-            console.print(f"  • {total_agents} agents would be migrated")
-            console.print(f"  • Sources: {', '.join(migration_sources)}")
-            if backup_first:
-                console.print("  • Backup would be created first")
-        else:
-            if backup_first:
-                console.print("[dim]Creating backup before migration...[/dim]")
-
-            console.print("✅ Migration completed:")
-            console.print(f"  • {total_agents} agents migrated")
-            console.print(f"  • Sources: {', '.join(migration_sources)}")
+        if state.is_verbose() and default_enabled:
+            console.print("\n[dim]Default Enabled:[/dim]")
+            for agent in sorted(default_enabled, key=lambda a: a.metadata.name):
+                console.print(f"  • {agent.metadata.name} - {agent.metadata.display_name}")
+        elif default_enabled:
+            console.print(f"\n[dim]Use --verbose to see {len(default_enabled)} default enabled agents[/dim]")
 
     except Exception as e:
-        console.print(f"[red]Error migrating agents: {e}[/red]")
+        console.print(f"[red]Error showing agent status: {e}[/red]")
         if state.is_debug():
             raise
 

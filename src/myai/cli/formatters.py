@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional, Type, Union
 from rich.console import Console
 from rich.json import JSON
 from rich.panel import Panel
+from rich.syntax import Syntax
 from rich.table import Table
 
 
@@ -101,12 +102,65 @@ class PanelFormatter(OutputFormatter):
         self.console.print(panel)
 
 
+class VerticalFormatter(OutputFormatter):
+    """Format output vertically with dynamic sizing."""
+
+    def format(
+        self,
+        data: Union[Dict, List],
+        title: Optional[str] = None,
+        **_kwargs,
+    ) -> None:
+        """Format data vertically with proper nesting."""
+        if not data:
+            self.console.print("[dim]No data to display[/dim]")
+            return
+
+        if title:
+            self.console.print(f"\n[bold magenta]{title}[/bold magenta]\n")
+
+        if isinstance(data, dict):
+            self._format_dict(data)
+        else:
+            # For lists, format as JSON
+            json_obj = JSON(json.dumps(data, indent=2, default=str))
+            self.console.print(json_obj)
+
+    def _format_dict(self, data: Dict[str, Any], indent: int = 0) -> None:
+        """Format dictionary with proper indentation and dynamic width."""
+        for key, value in data.items():
+            # Create formatted key
+            key_str = " " * indent + f"[cyan]{key}:[/cyan]"
+
+            if isinstance(value, dict):
+                # For nested dicts, print key and recurse
+                self.console.print(key_str)
+                self._format_dict(value, indent + 2)
+            elif isinstance(value, list):
+                # For lists, use JSON formatting
+                self.console.print(key_str)
+                if value and all(isinstance(item, (str, int, float, bool)) for item in value):
+                    # Simple list - print inline
+                    list_str = " " * (indent + 2) + ", ".join(str(item) for item in value)
+                    self.console.print(f"[yellow]{list_str}[/yellow]")
+                else:
+                    # Complex list - use JSON
+                    json_str = json.dumps(value, indent=2, default=str)
+                    indented_json = "\n".join(" " * (indent + 2) + line for line in json_str.split("\n"))
+                    self.console.print(Syntax(indented_json, "json", theme="monokai", line_numbers=False))
+            else:
+                # For simple values, print on same line
+                value_str = str(value)
+                self.console.print(f"{key_str} [yellow]{value_str}[/yellow]")
+
+
 def get_formatter(format_type: str, console: Optional[Console] = None) -> OutputFormatter:
     """Get formatter instance by type."""
     formatters: Dict[str, Type[OutputFormatter]] = {
         "table": TableFormatter,
         "json": JSONFormatter,
         "panel": PanelFormatter,
+        "vertical": VerticalFormatter,
     }
 
     formatter_class = formatters.get(format_type.lower(), TableFormatter)

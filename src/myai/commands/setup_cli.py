@@ -2,20 +2,206 @@
 MyAI Setup CLI command interface.
 """
 
+import asyncio
+import json
 import shutil
+import subprocess
+import tempfile
 from enum import Enum
 from pathlib import Path
+from typing import Optional
 
 import typer
+import yaml
 from rich.console import Console
+
+from myai.agent.registry import get_agent_registry
+from myai.agent_os.adapter import AgentOSAdapter
+from myai.config.manager import get_config_manager
+from myai.integrations.manager import IntegrationManager
+from myai.models.config import MyAIConfig
 
 app = typer.Typer()
 console = Console()
+
+# Constants for Agent-OS style minimal wrappers
 
 
 class Outputs(str, Enum):
     pretty = "pretty"
     json = "json"
+
+
+def _detect_agentos() -> Optional[Path]:
+    """Detect existing Agent-OS installation."""
+    # Check for .agent-os directory in user home
+    home = Path.home()
+    agentos_dir = home / ".agent-os"
+
+    if agentos_dir.exists() and agentos_dir.is_dir():
+        return agentos_dir
+
+    # Check for agentos command in PATH
+    try:
+        result = subprocess.run(
+            ["agentos", "--version"], capture_output=True, text=True, timeout=5, check=False  # noqa: S603,S607
+        )
+        if result.returncode == 0:
+            # Try to find installation path from command
+            which_result = subprocess.run(
+                ["which", "agentos"], capture_output=True, text=True, timeout=5, check=False  # noqa: S603,S607
+            )
+            if which_result.returncode == 0:
+                agentos_cmd = Path(which_result.stdout.strip())
+                # Usually installed in a parent directory structure
+                possible_dir = agentos_cmd.parent.parent / ".agent-os"
+                if possible_dir.exists():
+                    return possible_dir
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        pass
+
+    return None
+
+
+def _setup_workflow_system() -> None:
+    """Setup internal workflow system (based on Agent-OS)."""
+    import tempfile
+
+    from myai.agent_os import AgentOSAdapter
+
+    console.print("[dim]Setting up workflow system...[/dim]")
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+
+        # Clone Agent-OS repository
+        try:
+            subprocess.run(
+                [  # noqa: S603, S607
+                    "git",
+                    "clone",
+                    "https://github.com/buildermethods/agent-os.git",
+                    str(temp_path / "agent-os"),
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+
+            # Use adapter to transform and integrate
+            adapter = AgentOSAdapter()
+            adapter.setup_from_temp(temp_path / "agent-os")
+
+            console.print("✅ Workflow system initialized")
+
+        except subprocess.CalledProcessError as e:
+            console.print(f"[yellow]Warning: Could not setup workflow system: {e}[/yellow]")
+        except Exception as e:
+            console.print(f"[yellow]Warning: Workflow system setup failed: {e}[/yellow]")
+
+
+def _clone_and_integrate_agentos() -> None:
+    """Clone Agent-OS repository and integrate it invisibly into MyAI."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        agentos_path = temp_path / "agent-os"
+
+        try:
+            # Clone the Agent-OS repository
+            console.print("  Setting up workflow system components...")
+            result = subprocess.run(
+                [  # noqa: S603, S607
+                    "git",
+                    "clone",
+                    "https://github.com/buildermethods/agent-os.git",
+                    str(agentos_path),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            if result.returncode != 0:
+                console.print(f"  [yellow]Warning: Could not fetch workflow components: {result.stderr}[/yellow]")
+                return
+
+            # Use AgentOSAdapter to transform and integrate content
+            adapter = AgentOSAdapter()
+            adapter.setup_from_temp(agentos_path)
+
+            console.print("  ✅ Workflow system components integrated")
+
+        except Exception as e:
+            console.print(f"  [yellow]Warning: Could not setup workflow system: {e}[/yellow]")
+
+
+def _migrate_agentos_data(agentos_path: Path, myai_path: Path) -> None:
+    """Migrate data from existing Agent-OS installation."""
+    console.print(f"\n[yellow]Found existing Agent-OS at: {agentos_path}[/yellow]")
+
+    # Create backup
+    backup_dir = myai_path / "backups" / "agentos-migration"
+    backup_dir.mkdir(parents=True, exist_ok=True)
+
+    # Map Agent-OS directories to MyAI
+    mappings = {
+        "agents": "agents",
+        "templates": "templates",
+        "tools": "tools",
+        "hooks": "hooks",
+        "config": "config/agentos-imported",
+    }
+
+    migrated_items = []
+
+    for agentos_subdir, myai_subdir in mappings.items():
+        src = agentos_path / agentos_subdir
+        if src.exists():
+            dst = myai_path / myai_subdir
+            dst.mkdir(parents=True, exist_ok=True)
+
+            # Copy files
+            for item in src.iterdir():
+                if item.is_file():
+                    # Backup original if exists
+                    dst_file = dst / item.name
+                    if dst_file.exists():
+                        backup_file = backup_dir / myai_subdir / item.name
+                        backup_file.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(dst_file, backup_file)
+
+                    # Copy from Agent-OS
+                    shutil.copy2(item, dst_file)
+                    migrated_items.append(f"{agentos_subdir}/{item.name}")
+
+    if migrated_items:
+        console.print(f"✅ Migrated {len(migrated_items)} items from Agent-OS")
+
+        # Update Agent-OS config to point to MyAI
+        agentos_config = agentos_path / "config.json"
+        if agentos_config.exists():
+            try:
+                with open(agentos_config) as f:
+                    existing_config = json.load(f)
+
+                # Add MyAI integration marker
+                existing_config["myai_integration"] = {
+                    "enabled": True,
+                    "myai_path": str(myai_path),
+                    "migrated": True,
+                }
+
+                # Backup original config
+                backup_config = backup_dir / "config.json"
+                shutil.copy2(agentos_config, backup_config)
+
+                # Write updated config
+                with open(agentos_config, "w") as f:
+                    json.dump(existing_config, f, indent=2)
+
+                console.print("✅ Updated Agent-OS config for MyAI integration")
+            except Exception as e:
+                console.print(f"[yellow]Warning: Could not update Agent-OS config: {e}[/yellow]")
 
 
 ########################################################################################
@@ -58,24 +244,31 @@ def all_setup():
     - ~/.claude/agents/ (directory) and *.md files
     - .claude/agents/ (directory) and *.md files
     - .claude/settings.local.json (only if doesn't exist)
-    - .cursor/rules/ (directory) and *.mdc files (NOT .cursor itself)
+    - .cursor/rules/ (directory) and *.mdc files
 
     Examples:
       myai setup all-setup
     """
-    import asyncio
     import json
 
-    import yaml
-
     import myai
-    from myai.agent.registry import get_agent_registry
-    from myai.integrations.manager import IntegrationManager
 
     console.print("🚀 Starting comprehensive MyAI setup...")
 
-    # Step 1: Setup global MyAI directory with Agent-OS components
-    console.print("\n[bold]Step 1: Setting up ~/.myai directory with Agent-OS[/bold]")
+    # Check for existing Agent-OS installation
+    existing_agentos = _detect_agentos()
+    if existing_agentos:
+        console.print(f"\n[yellow]🔍 Detected existing Agent-OS installation at: {existing_agentos}[/yellow]")
+        if typer.confirm("Would you like to migrate your Agent-OS data to MyAI?"):
+            myai_dir = Path.home() / ".myai"
+            myai_dir.mkdir(exist_ok=True)
+            _migrate_agentos_data(existing_agentos, myai_dir)
+
+    # Step 1: Setup global MyAI directory with workflow system
+    console.print("\n[bold]Step 1: Setting up ~/.myai directory with workflow system[/bold]")
+
+    # Setup the workflow system (invisible Agent-OS integration)
+    _setup_workflow_system()
 
     package_path = Path(myai.__file__).parent
     source_agents_dir = package_path / "data" / "agents" / "default"
@@ -110,31 +303,43 @@ def all_setup():
     else:
         console.print(f"✅ Copied {copied_count} default agents to ~/.myai/agents")
 
-    # Setup Agent-OS components
-    agentos_dir = myai_dir / ".agent-os"
-    if not agentos_dir.exists():
-        agentos_dir.mkdir(parents=True, exist_ok=True)
-        console.print("✅ Created .agent-os directory structure")
+    # Clone and integrate Agent-OS invisibly
+    _clone_and_integrate_agentos()
 
-        # Create Agent-OS config
-        agentos_config = agentos_dir / "config.json"
-        if not agentos_config.exists():
-            config = {
-                "version": "1.0.0",
-                "myai_integration": True,
-                "paths": {
-                    "agents": str(myai_dir / "agents"),
-                    "templates": str(myai_dir / "templates"),
-                    "tools": str(myai_dir / "tools"),
-                },
-            }
-            with open(agentos_config, "w", encoding="utf-8") as f:
-                json.dump(config, f, indent=2)
-            console.print("✅ Created Agent-OS configuration")
-
-    # Create default configuration
+    # Create MyAI config directory
     config_dir = myai_dir / "config"
     config_dir.mkdir(parents=True, exist_ok=True)
+
+    # Create templates directory
+    templates_dir = myai_dir / "templates"
+    templates_dir.mkdir(exist_ok=True)
+
+    # Create tools directory
+    tools_dir = myai_dir / "tools"
+    tools_dir.mkdir(exist_ok=True)
+
+    # Create hooks directory
+    hooks_dir = myai_dir / "hooks"
+    hooks_dir.mkdir(exist_ok=True)
+
+    # Create example hook for agent creation
+    example_hook = hooks_dir / "on_agent_create.sh"
+    if not example_hook.exists():
+        hook_content = """#!/bin/bash
+# Example MyAI hook for agent creation
+# This hook is called when a new agent is created
+
+AGENT_NAME="$1"
+AGENT_PATH="$2"
+
+echo "New agent created: $AGENT_NAME at $AGENT_PATH"
+
+# Add your custom logic here
+# Example: sync to version control, notify team, etc.
+"""
+        example_hook.write_text(hook_content)
+        example_hook.chmod(0o755)
+        console.print("✅ Created example hooks")
 
     default_agents_config = config_dir / "default_agents.yaml"
     if not default_agents_config.exists():
@@ -166,30 +371,52 @@ def all_setup():
 
     console.print("✅ Created ~/.claude directory structure")
 
-    # Step 3: Sync agents to Claude
-    console.print("\n[bold]Step 3: Syncing agents to Claude[/bold]")
+    # Step 3: Configure default agent enablement - set Agent-OS agents as enabled defaults
+    console.print("\n[bold]Step 3: Configuring default agent enablement...[/bold]")
+
+    # Define Agent-OS agents (the only ones that should be pre-enabled)
+    agentos_agents = ["agentos-project-manager", "agentos-spec-creator", "agentos-workflow-executor"]
+
+    registry = get_agent_registry()
+    config_manager = get_config_manager()
+
+    # Set Agent-OS agents as globally enabled so they're ready to use across all projects
+    config_manager.set_config_value("agents.global_enabled", agentos_agents, level="user")
+    # Clear any disabled lists so all agents are visible
+    config_manager.set_config_value("agents.global_disabled", [], level="user")
+    config_manager.set_config_value("agents.disabled", [], level="user")
+
+    console.print(f"✅ Pre-enabled {len(agentos_agents)} Agent-OS agents")
+    console.print("✅ All other agents available and can be enabled as needed")
+
+    # Step 4: Sync globally enabled agents to Claude
+    console.print("\n[bold]Step 4: Syncing globally enabled agents to Claude[/bold]")
 
     async def sync_to_claude():
         manager = IntegrationManager()
         await manager.initialize(["claude"])
 
-        # Get all agents from registry
-        registry = get_agent_registry()
-        agents = registry.list_agents()
+        # Get enabled agents only and sync them to ~/.claude/agents
+        config = config_manager.get_config()
 
-        # Sync to Claude
-        results = await manager.sync_agents(agents, ["claude"])
+        all_agents = registry.list_agents()
+        # Filter to only globally enabled agents for Claude global setup
+        global_enabled_list = getattr(config.agents, "global_enabled", [])
+        enabled_agents = [a for a in all_agents if a.metadata.name in global_enabled_list]
+
+        # Sync only enabled agents to Claude
+        results = await manager.sync_agents(enabled_agents, ["claude"])
         return results
 
     claude_results = asyncio.run(sync_to_claude())
     if claude_results.get("claude", {}).get("status") == "success":
         synced = claude_results["claude"].get("synced", 0)
-        console.print(f"✅ Synced {synced} agents to ~/.claude/agents")
+        console.print(f"✅ Synced {synced} globally enabled agents to ~/.claude/agents")
     else:
         console.print("[yellow]⚠️  Claude sync had issues[/yellow]")
 
-    # Step 4: Setup project-level directories
-    console.print("\n[bold]Step 4: Setting up project-level integration[/bold]")
+    # Step 5: Setup project-level directories
+    console.print("\n[bold]Step 5: Setting up project-level integration[/bold]")
 
     cwd = Path.cwd()
 
@@ -201,28 +428,60 @@ def all_setup():
     project_claude_agents = project_claude_dir / "agents"
     project_claude_agents.mkdir(exist_ok=True)
 
-    # Copy agents to project .claude/agents (merge-safe)
-    console.print("  Syncing agents to project .claude/agents...")
+    # Create lightweight wrapper agents that reference central configs
+    console.print("  Creating lightweight agent wrappers for project...")
     agent_count = 0
     skipped_count = 0
-    for agent_file in (Path.home() / ".claude" / "agents").glob("*.md"):
-        target_file = project_claude_agents / agent_file.name
+
+    # Get all agents from registry to create wrappers
+    registry = get_agent_registry()
+    agents = registry.list_agents()
+
+    # Filter to only project-enabled agents (not global ones)
+    # Global agents are available via ~/.claude/agents and don't need project wrappers
+    config_manager = get_config_manager()
+    project_config: MyAIConfig = config_manager.get_config()
+    project_enabled_list = project_config.agents.enabled
+
+    # Only create project files for project-enabled agents
+    project_enabled_agents = [a for a in agents if a.metadata.name in project_enabled_list]
+
+    # For Cursor, we need BOTH global and project agents since Cursor doesn't have global settings
+    global_enabled_list = getattr(project_config.agents, "global_enabled", [])
+    cursor_enabled_agents = [
+        a for a in agents if a.metadata.name in global_enabled_list or a.metadata.name in project_enabled_list
+    ]
+
+    for agent in project_enabled_agents:
+        agent_name = agent.metadata.name
+        target_file = project_claude_agents / f"{agent_name}.md"
+
         if not target_file.exists():
-            shutil.copy2(agent_file, target_file)
+            # Create minimal Agent-OS style wrapper - bare bones reference
+            wrapper_content = f"""---
+agent: "{agent_name}"
+source: "~/.myai/agents"
+---
+
+# {agent_name.replace('-', ' ').title()}
+
+@myai/agents/{agent.metadata.category.value if agent.metadata.category else 'default'}/{agent_name}.md
+"""
+            target_file.write_text(wrapper_content)
             agent_count += 1
         else:
             skipped_count += 1
 
     if skipped_count > 0:
-        console.print(f"  ✅ Copied {agent_count} new agents, skipped {skipped_count} existing")
+        console.print(f"  ✅ Created {agent_count} new agent wrappers, skipped {skipped_count} existing")
     else:
-        console.print(f"  ✅ Copied {agent_count} agents to .claude/agents")
+        console.print(f"  ✅ Created {agent_count} agent wrappers in .claude/agents")
 
     # Create project-level Claude settings
     project_claude_settings = project_claude_dir / "settings.local.json"
     if not project_claude_settings.exists():
         # Create a basic project configuration
-        project_config = {
+        claude_config = {
             "projects": {
                 str(cwd): {
                     "name": cwd.name,
@@ -246,7 +505,7 @@ def all_setup():
         }
 
         with open(project_claude_settings, "w", encoding="utf-8") as f:
-            json.dump(project_config, f, indent=2)
+            json.dump(claude_config, f, indent=2)
 
         console.print("✅ Created project .claude configuration")
 
@@ -257,45 +516,28 @@ def all_setup():
     project_cursor_rules.mkdir(exist_ok=True)
     console.print("✅ Created project .cursor/rules directory")
 
-    # Step 5: Create Cursor rules as .mdc files
-    console.print("\n[bold]Step 5: Creating Cursor rules (.mdc files)[/bold]")
+    # Step 6: Create Cursor rules as lightweight .mdc wrappers
+    console.print("\n[bold]Step 6: Creating lightweight Cursor rule wrappers[/bold]")
 
-    # Get all agents from registry
-    registry = get_agent_registry()
-    agents = registry.list_agents()
-
-    # Create .mdc files for each agent
+    # Create .mdc files for both global and project enabled agents (Cursor needs both)
     mdc_count = 0
-    for agent in agents:
+    for agent in cursor_enabled_agents:
         agent_name = "unknown"  # Default value to avoid UnboundLocalError
         try:
-            # Get agent name
-            if hasattr(agent, "metadata") and hasattr(agent.metadata, "name"):
-                agent_name = agent.metadata.name
-            elif hasattr(agent, "name"):
-                agent_name = agent.name
-            elif isinstance(agent, dict) and "name" in agent:
-                agent_name = agent["name"]
+            agent_name = agent.metadata.name
 
-            # Get agent content
-            if hasattr(agent, "content"):
-                agent_content = agent.content
-            elif isinstance(agent, dict) and "content" in agent:
-                agent_content = agent["content"]
-            else:
-                agent_content = ""
-
-            agent_display = agent_name.replace("-", " ").replace("_", " ").title()
-
-            # Create MDC content with frontmatter
+            # Create minimal Agent-OS style cursor rule - bare bones reference
             mdc_content = f"""---
-description: "{agent_display} Agent"
-globs:
-  - '**/*'
+agent: "{agent_name}"
+description: "{agent_name.replace('-', ' ').title()}"
+source: "~/.myai/agents"
+globs: ['**/*']
 alwaysApply: false
 ---
 
-{agent_content}
+# {agent_name.replace('-', ' ').title()}
+
+@myai/agents/{agent.metadata.category.value if agent.metadata.category else 'default'}/{agent_name}.md
 """
 
             # Write .mdc file (merge-safe)
@@ -312,15 +554,18 @@ alwaysApply: false
     # Final summary
     console.print("\n[bold green]✨ MyAI setup complete![/bold green]")
     console.print("\n[bold]What was set up:[/bold]")
-    console.print("  • Global configuration in ~/.myai with Agent-OS")
+    console.print("  • Global configuration in ~/.myai")
+    console.print("    - Workflow system with commands and standards")
+    console.print("    - Templates, tools, and hooks directories")
+    console.print("    - Default agents configuration")
     console.print("  • Claude integration in ~/.claude")
     console.print("  • Project-level .claude/agents directory")
     console.print("  • Project-level .cursor/rules directory with .mdc files")
     console.print("\n[bold]You can now:[/bold]")
     console.print("  • Use 'myai agent list' to see available agents")
+    console.print("  • Use 'myai agent enable <name>' to enable agents (files created automatically)")
     console.print("  • Access agents in Claude Code (from project .claude/agents)")
     console.print("  • Access agents in Cursor as project rules")
-    console.print("  • Run 'myai integration sync' to update integrations")
 
 
 @app.command()

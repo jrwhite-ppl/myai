@@ -55,11 +55,20 @@ class TestSetupIntegration(unittest.TestCase):
 
     @patch("myai.commands.setup_cli.Path.home")
     @patch("myai.commands.setup_cli.Path.cwd")
-    def test_all_setup_creates_directory_structure(self, mock_cwd, mock_home):
+    @patch("myai.commands.setup_cli.get_config_manager")
+    def test_all_setup_creates_directory_structure(self, mock_config_manager, mock_cwd, mock_home):
         """Test that all-setup creates the complete directory structure."""
         # Setup mocks
         mock_home.return_value = self.test_home
         mock_cwd.return_value = self.test_project
+
+        # Mock config manager
+        config_mgr = MagicMock()
+        config = MagicMock()
+        config.agents.disabled = []
+        config.agents.enabled = []
+        config_mgr.get_config.return_value = config
+        mock_config_manager.return_value = config_mgr
 
         # Create a mock registry with simple test agents
         with patch("myai.agent.registry.get_agent_registry") as mock_registry:
@@ -98,16 +107,21 @@ class TestSetupIntegration(unittest.TestCase):
                     myai_dir = self.test_home / ".myai"
                     self.assertTrue(myai_dir.exists(), "~/.myai directory not created")
                     self.assertTrue((myai_dir / "agents").exists(), "~/.myai/agents not created")
-                    self.assertTrue((myai_dir / ".agent-os").exists(), "~/.myai/.agent-os not created")
                     self.assertTrue((myai_dir / "config").exists(), "~/.myai/config not created")
 
-                    # Verify Agent-OS config was created
-                    agentos_config = myai_dir / ".agent-os" / "config.json"
-                    self.assertTrue(agentos_config.exists(), "Agent-OS config.json not created")
-                    with open(agentos_config) as f:
-                        config = json.load(f)
-                        self.assertEqual(config["version"], "1.0.0")
-                        self.assertTrue(config["myai_integration"])
+                    # Verify MyAI directories were created
+                    self.assertTrue((myai_dir / "templates").exists(), "Templates directory not created")
+                    self.assertTrue((myai_dir / "tools").exists(), "Tools directory not created")
+                    self.assertTrue((myai_dir / "hooks").exists(), "Hooks directory not created")
+
+                    # Verify example hook was created
+                    example_hook = myai_dir / "hooks" / "on_agent_create.sh"
+                    self.assertTrue(example_hook.exists(), "Example hook not created")
+
+                    # Verify workflow system directories were created (from invisible Agent-OS integration)
+                    self.assertTrue((myai_dir / "workflows").exists(), "Workflows directory not created")
+                    self.assertTrue((myai_dir / "standards").exists(), "Standards directory not created")
+                    self.assertTrue((myai_dir / "commands").exists(), "Commands directory not created")
 
                     # Verify Claude directory structure
                     claude_dir = self.test_home / ".claude"
@@ -123,17 +137,98 @@ class TestSetupIntegration(unittest.TestCase):
                     self.assertTrue(project_cursor.exists(), ".cursor not created in project")
                     self.assertTrue((project_cursor / "rules").exists(), ".cursor/rules not created in project")
 
-                    # Verify MDC files were created
+                    # Verify no MDC files created when no agents are enabled
                     mdc_files = list((project_cursor / "rules").glob("*.mdc"))
-                    self.assertEqual(len(mdc_files), 3, f"Expected 3 .mdc files, found {len(mdc_files)}")
+                    # Should have no MDC files when no agents are in enabled list
+                    self.assertEqual(len(mdc_files), 0, "Unexpected .mdc files created when no agents enabled")
 
-                    # Check MDC file content
-                    for mdc_file in mdc_files:
-                        content = mdc_file.read_text()
-                        self.assertIn("---", content, "MDC file missing frontmatter")
-                        self.assertIn("description:", content, "MDC file missing description")
-                        self.assertIn("globs:", content, "MDC file missing globs")
-                        self.assertIn("alwaysApply: false", content, "MDC file missing alwaysApply")
+                    # Verify no Claude agent files created when no agents are enabled
+                    claude_agent_files = list((project_claude / "agents").glob("*.md"))
+                    self.assertEqual(len(claude_agent_files), 0, "Unexpected .md files created when no agents enabled")
+
+    @patch("myai.commands.setup_cli.Path.home")
+    @patch("myai.commands.setup_cli.Path.cwd")
+    @patch("myai.commands.setup_cli.get_config_manager")
+    def test_setup_creates_cursor_files_for_global_agents(self, mock_config_manager, mock_cwd, mock_home):
+        """Test that setup creates Cursor files for globally enabled agents."""
+        # Setup mocks
+        mock_home.return_value = self.test_home
+        mock_cwd.return_value = self.test_project
+
+        # Mock config manager with global agents enabled
+        config_mgr = MagicMock()
+        config = MagicMock()
+        config.agents.disabled = []
+        config.agents.enabled = []  # No project agents
+        # Mock the global_enabled attribute that may not exist on initial setup
+        config.agents.global_enabled = ["agentos-project-manager", "agentos-spec-creator"]
+        config_mgr.get_config.return_value = config
+        mock_config_manager.return_value = config_mgr
+
+        # Create test agents with global-enabled names
+        with patch("myai.agent.registry.get_agent_registry") as mock_registry:
+            registry = MagicMock()
+            test_agents = []
+            for name in ["agentos-project-manager", "agentos-spec-creator"]:
+                agent = MagicMock()
+                agent.metadata.name = name
+                agent.metadata.display_name = name.replace("-", " ").title()
+                agent.metadata.category.value = "engineering"
+                agent.content = f"# {name.replace('-', ' ').title()}\n\nAgent content here."
+                test_agents.append(agent)
+            registry.list_agents.return_value = test_agents
+            mock_registry.return_value = registry
+
+            # Mock the integration manager
+            with patch("myai.integrations.manager.IntegrationManager") as mock_manager_class:
+                mock_manager = MagicMock()
+                mock_manager_class.return_value = mock_manager
+                mock_manager.initialize = AsyncMock()
+                mock_manager.sync_agents = AsyncMock(return_value={"claude": {"status": "success", "synced": 2}})
+
+                # Mock the package file path
+                with patch("myai.__file__", str(self.test_package / "__init__.py")):
+                    # Run the setup command
+                    result = self.runner.invoke(app, ["all-setup"])
+
+                    # Check command succeeded
+                    self.assertEqual(result.exit_code, 0, f"Command failed with output:\n{result.stdout}")
+
+                    # Verify global Claude files were created
+                    claude_dir = self.test_home / ".claude" / "agents"
+                    self.assertTrue(claude_dir.exists(), "~/.claude/agents directory not created")
+
+                    global_claude_files = list(claude_dir.glob("*.md"))
+                    self.assertEqual(
+                        len(global_claude_files), 2, f"Expected 2 global Claude files, got {len(global_claude_files)}"
+                    )
+
+                    # Verify Cursor files were created for global agents (since Cursor has no global settings)
+                    project_cursor = self.test_project / ".cursor" / "rules"
+                    self.assertTrue(project_cursor.exists(), ".cursor/rules directory not created")
+
+                    cursor_files = list(project_cursor.glob("*.mdc"))
+                    self.assertEqual(
+                        len(cursor_files), 2, f"Expected 2 Cursor files for global agents, got {len(cursor_files)}"
+                    )
+
+                    # Verify specific files exist
+                    for name in ["agentos-project-manager", "agentos-spec-creator"]:
+                        cursor_file = project_cursor / f"{name}.mdc"
+                        self.assertTrue(cursor_file.exists(), f"Cursor file for global agent {name} not created")
+
+                        # Verify file content structure
+                        content = cursor_file.read_text()
+                        self.assertIn(f'agent: "{name}"', content)
+                        self.assertIn("@myai/agents/engineering/", content)
+
+                    # Verify NO project Claude files were created (global agents don't need project wrappers)
+                    project_claude = self.test_project / ".claude" / "agents"
+                    if project_claude.exists():
+                        project_claude_files = list(project_claude.glob("*.md"))
+                        self.assertEqual(
+                            len(project_claude_files), 0, "No project Claude files should exist for global agents"
+                        )
 
     @patch("myai.commands.setup_cli.Path.home")
     @patch("myai.commands.setup_cli.Path.cwd")
@@ -256,11 +351,20 @@ class TestSetupIntegration(unittest.TestCase):
 
     @patch("myai.commands.setup_cli.Path.home")
     @patch("myai.commands.setup_cli.Path.cwd")
-    def test_setup_uninstall_cycle(self, mock_cwd, mock_home):
+    @patch("myai.commands.setup_cli.get_config_manager")
+    def test_setup_uninstall_cycle(self, mock_config_manager, mock_cwd, mock_home):
         """Test complete cycle: setup followed by uninstall."""
         # Setup mocks
         mock_home.return_value = self.test_home
         mock_cwd.return_value = self.test_project
+
+        # Mock config manager
+        config_mgr = MagicMock()
+        config = MagicMock()
+        config.agents.disabled = []
+        config.agents.enabled = []
+        config_mgr.get_config.return_value = config
+        mock_config_manager.return_value = config_mgr
 
         # First, run setup
         with patch("myai.__file__", str(self.test_package / "__init__.py")):
@@ -299,6 +403,81 @@ class TestSetupIntegration(unittest.TestCase):
                     # Verify MyAI removed but user files remain
                     self.assertFalse((self.test_home / ".myai").exists())
                     self.assertTrue(user_file.exists())
+
+    @patch("myai.commands.setup_cli.Path.home")
+    @patch("myai.commands.setup_cli.Path.cwd")
+    @patch("myai.commands.setup_cli._detect_agentos")
+    @patch("myai.commands.setup_cli.get_config_manager")
+    def test_all_setup_with_existing_agentos(self, mock_config_manager, mock_detect, mock_cwd, mock_home):
+        """Test all-setup with existing Agent-OS installation."""
+        # Setup mocks
+        mock_home.return_value = self.test_home
+        mock_cwd.return_value = self.test_project
+
+        # Mock config manager
+        config_mgr = MagicMock()
+        config = MagicMock()
+        config.agents.disabled = []
+        config.agents.enabled = []
+        config_mgr.get_config.return_value = config
+        mock_config_manager.return_value = config_mgr
+
+        # Create fake Agent-OS directory
+        fake_agentos = self.test_dir / "fake-agentos"
+        fake_agentos.mkdir()
+        (fake_agentos / "agents").mkdir()
+        (fake_agentos / "agents" / "test-agent.md").write_text("# Test Agent")
+        (fake_agentos / "config.json").write_text('{"version": "0.9.0"}')
+
+        mock_detect.return_value = fake_agentos
+
+        # Mock the confirm dialog to say yes
+        with patch("typer.confirm", return_value=True):
+            with patch("myai.__file__", str(self.test_package / "__init__.py")):
+                with patch("myai.agent.registry.get_agent_registry") as mock_registry:
+                    registry = MagicMock()
+                    # Create some test agents
+                    test_agents = []
+                    for name in ["test-agent"]:
+                        agent = MagicMock()
+                        agent.metadata.name = name
+                        agent.name = name
+                        agent.content = f"# {name.replace('-', ' ').title()}\n\nAgent content here."
+                        test_agents.append(agent)
+                    registry.list_agents.return_value = test_agents
+                    mock_registry.return_value = registry
+
+                    with patch("myai.integrations.manager.IntegrationManager") as mock_manager_class:
+                        mock_manager = MagicMock()
+                        mock_manager_class.return_value = mock_manager
+                        mock_manager.initialize = AsyncMock()
+                        mock_manager.sync_agents = AsyncMock(
+                            return_value={"claude": {"status": "success", "synced": 1}}
+                        )
+
+                        # Run setup
+                        result = self.runner.invoke(app, ["all-setup"])
+                        if result.exit_code != 0:
+                            print(f"STDOUT:\n{result.stdout}")
+                            print(f"STDERR:\n{result.stderr}")
+                            print(f"Exception: {result.exception}")
+                        self.assertEqual(
+                            result.exit_code, 0, f"Setup failed:\\n{result.stdout}\\n\\nSTDERR:\\n{result.stderr}"
+                        )
+
+                        # Verify migration happened
+                        myai_dir = self.test_home / ".myai"
+                        self.assertTrue((myai_dir / "agents" / "test-agent.md").exists(), "Agent not migrated")
+
+                        # Verify backup was created
+                        backup_dir = myai_dir / "backups" / "agentos-migration"
+                        self.assertTrue(backup_dir.exists(), "Backup directory not created")
+
+                        # Verify Agent-OS config was updated
+                        with open(fake_agentos / "config.json") as f:
+                            config = json.load(f)
+                            self.assertIn("myai_integration", config)
+                            self.assertTrue(config["myai_integration"]["enabled"])
 
 
 if __name__ == "__main__":

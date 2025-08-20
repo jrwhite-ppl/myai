@@ -27,6 +27,7 @@ class AgentCategory(str, Enum):
     LEGAL = "legal"
     SECURITY = "security"
     LEADERSHIP = "leadership"
+    WORKFLOW = "workflow"
     CUSTOM = "custom"
 
 
