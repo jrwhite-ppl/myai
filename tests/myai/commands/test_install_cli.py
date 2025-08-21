@@ -3,10 +3,11 @@ from unittest.mock import MagicMock
 
 from typer.testing import CliRunner
 
-from myai.commands.setup_cli import app, callback, client, global_setup, project
+from myai.app import create_app
+from myai.commands.install_cli import app, callback, client, install_global, project
 
 
-class TestSetupCLI(unittest.TestCase):
+class TestInstallCLI(unittest.TestCase):
     """Test cases for the setup CLI subcommands."""
 
     def setUp(self):
@@ -14,47 +15,47 @@ class TestSetupCLI(unittest.TestCase):
         self.runner = CliRunner()
         self.app = app
 
-    def test_setup_cli_help(self):
+    def test_install_cli_help(self):
         """Test that setup CLI shows help when no command is provided."""
         result = self.runner.invoke(self.app, [])
         self.assertEqual(result.exit_code, 0)
         self.assertIn("Interact with MyAI with this command", result.stdout)
 
-    def test_setup_cli_help_flag(self):
+    def test_install_cli_help_flag(self):
         """Test that setup CLI shows help with --help flag."""
         result = self.runner.invoke(self.app, ["--help"])
         self.assertEqual(result.exit_code, 0)
         self.assertIn("Interact with MyAI with this command", result.stdout)
 
-    def test_setup_all_command(self):
+    def test_install_all_command(self):
         """Test the setup all command."""
         # This test might fail if run without proper environment setup
         # as it performs real file operations
-        result = self.runner.invoke(self.app, ["all-setup"])
+        result = self.runner.invoke(self.app, ["all"])
         # Check that command runs (might exit with 0 or 1 depending on environment)
         self.assertIn(result.exit_code, [0, 1])
 
-    def test_setup_global_setup_command(self):
-        """Test the setup global-setup command."""
-        result = self.runner.invoke(self.app, ["global-setup"])
+    def test_install_global_setup_command(self):
+        """Test the setup global command."""
+        result = self.runner.invoke(self.app, ["global"])
         self.assertEqual(result.exit_code, 0)
 
-    def test_setup_project_command(self):
+    def test_install_project_command(self):
         """Test the setup project command."""
         result = self.runner.invoke(self.app, ["project"])
         self.assertEqual(result.exit_code, 0)
 
-    def test_setup_client_command(self):
+    def test_install_client_command(self):
         """Test the setup client command with a client name."""
         result = self.runner.invoke(self.app, ["client", "claude"])
         self.assertEqual(result.exit_code, 0)
 
-    def test_setup_client_command_no_client(self):
+    def test_install_client_command_no_client(self):
         """Test the setup client command without client name."""
         result = self.runner.invoke(self.app, ["client"])
         self.assertNotEqual(result.exit_code, 0)  # Should fail without client name
 
-    def test_setup_client_command_help(self):
+    def test_install_client_command_help(self):
         """Test that setup client command shows help."""
         result = self.runner.invoke(self.app, ["client", "--help"])
         self.assertEqual(result.exit_code, 0)
@@ -65,34 +66,38 @@ class TestSetupCLI(unittest.TestCase):
         result = self.runner.invoke(self.app, ["invalid-subcommand"])
         self.assertNotEqual(result.exit_code, 0)
 
-    def test_setup_uninstall_command_help(self):
-        """Test that setup uninstall command shows help."""
-        result = self.runner.invoke(self.app, ["uninstall", "--help"])
+    def test_install_uninstall_command_help(self):
+        """Test that uninstall command shows help."""
+        main_app = create_app()
+        result = self.runner.invoke(main_app, ["uninstall", "--help"])
         self.assertEqual(result.exit_code, 0)
         self.assertIn("Uninstall MyAI components", result.stdout)
         self.assertIn("--all", result.stdout)
         self.assertIn("--force", result.stdout)
 
-    def test_setup_uninstall_no_options(self):
+    def test_install_uninstall_no_options(self):
         """Test uninstall command with no options shows warning."""
-        result = self.runner.invoke(self.app, ["uninstall"])
+        main_app = create_app()
+        result = self.runner.invoke(main_app, ["uninstall"])
         self.assertEqual(result.exit_code, 0)
         self.assertIn("No components selected for removal", result.stdout)
 
-    def test_setup_uninstall_with_project_option(self):
+    def test_install_uninstall_with_project_option(self):
         """Test uninstall command with --project option (with force to skip prompt)."""
-        result = self.runner.invoke(self.app, ["uninstall", "--project", "--force"])
+        main_app = create_app()
+        result = self.runner.invoke(main_app, ["uninstall", "--project", "--force"])
         # Exit code 0 even if nothing to remove
         self.assertEqual(result.exit_code, 0)
 
-    def test_setup_uninstall_with_all_option(self):
+    def test_install_uninstall_with_all_option(self):
         """Test uninstall command with --all option (with force to skip prompt)."""
-        result = self.runner.invoke(self.app, ["uninstall", "--all", "--force"])
+        main_app = create_app()
+        result = self.runner.invoke(main_app, ["uninstall", "--all", "--force"])
         # Exit code 0 even if nothing to remove
         self.assertEqual(result.exit_code, 0)
 
 
-class TestSetupCLIFunctions(unittest.TestCase):
+class TestInstallCLIFunctions(unittest.TestCase):
     """Test cases for individual setup CLI functions."""
 
     def test_all_function(self):
@@ -105,7 +110,7 @@ class TestSetupCLIFunctions(unittest.TestCase):
         """Test the global_setup function directly."""
         # This function currently just passes, so we just test it doesn't raise an error
         try:
-            global_setup()
+            install_global()
         except Exception as e:
             self.fail(f"global_setup() raised {e} unexpectedly!")
 
@@ -133,7 +138,7 @@ class TestSetupCLIFunctions(unittest.TestCase):
             self.fail(f"client() raised {e} unexpectedly!")
 
 
-class TestSetupCLICallback(unittest.TestCase):
+class TestInstallCLICallback(unittest.TestCase):
     """Test cases for the setup CLI callback function."""
 
     def test_callback_with_no_subcommand(self):
@@ -158,12 +163,12 @@ class TestSetupCLICallback(unittest.TestCase):
         mock_ctx.invoke.assert_not_called()
 
 
-class TestSetupCLIWithMockedDependencies(unittest.TestCase):
+class TestInstallCLIWithMockedDependencies(unittest.TestCase):
     """Test cases for setup CLI with mocked external dependencies."""
 
     def test_outputs_enum(self):
         """Test the Outputs enum."""
-        from myai.commands.setup_cli import Outputs
+        from myai.commands.install_cli import Outputs
 
         self.assertEqual(Outputs.pretty, "pretty")
         self.assertEqual(Outputs.json, "json")
@@ -171,7 +176,7 @@ class TestSetupCLIWithMockedDependencies(unittest.TestCase):
         self.assertIn("json", [e.value for e in Outputs])
 
 
-class TestSetupCLIIntegration(unittest.TestCase):
+class TestInstallCLIIntegration(unittest.TestCase):
     """Integration tests for setup CLI."""
 
     def setUp(self):
@@ -179,23 +184,23 @@ class TestSetupCLIIntegration(unittest.TestCase):
         self.runner = CliRunner()
         self.app = app
 
-    def test_setup_all_integration(self):
+    def test_install_all_integration(self):
         """Integration test for setup all command."""
-        result = self.runner.invoke(self.app, ["all-setup"])
+        result = self.runner.invoke(self.app, ["all"])
         # Check that command runs (might exit with 0 or 1 depending on environment)
         self.assertIn(result.exit_code, [0, 1])
 
-    def test_setup_global_setup_integration(self):
-        """Integration test for setup global-setup command."""
-        result = self.runner.invoke(self.app, ["global-setup"])
+    def test_install_global_setup_integration(self):
+        """Integration test for setup global command."""
+        result = self.runner.invoke(self.app, ["global"])
         self.assertEqual(result.exit_code, 0)
 
-    def test_setup_project_integration(self):
+    def test_install_project_integration(self):
         """Integration test for setup project command."""
         result = self.runner.invoke(self.app, ["project"])
         self.assertEqual(result.exit_code, 0)
 
-    def test_setup_client_integration(self):
+    def test_install_client_integration(self):
         """Integration test for setup client command."""
         test_clients = ["claude", "cursor", "windsurf", "agent-os"]
 
@@ -204,7 +209,7 @@ class TestSetupCLIIntegration(unittest.TestCase):
                 result = self.runner.invoke(self.app, ["client", client_name])
                 self.assertEqual(result.exit_code, 0)
 
-    def test_setup_client_invalid_integration(self):
+    def test_install_client_invalid_integration(self):
         """Integration test for setup client command with invalid client."""
         result = self.runner.invoke(self.app, ["client", "invalid-client"])
         self.assertEqual(result.exit_code, 0)  # Currently just passes

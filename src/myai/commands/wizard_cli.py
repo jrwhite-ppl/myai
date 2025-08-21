@@ -1,7 +1,7 @@
 """
 Interactive wizard CLI commands for MyAI.
 
-This module provides guided wizards for setup, agent creation, migration,
+This module provides guided wizards for installation, agent creation, migration,
 and troubleshooting to improve user experience.
 """
 
@@ -27,56 +27,56 @@ console = Console()
 
 
 @app.command()
-def setup(
+def install(
     ctx: typer.Context,
-    quick: bool = typer.Option(False, "--quick", help="Run quick setup with defaults"),  # noqa: FBT001
+    quick: bool = typer.Option(False, "--quick", help="Run quick installation with defaults"),  # noqa: FBT001
 ):
-    """Interactive setup wizard for initial MyAI configuration."""
+    """Interactive installation wizard for initial MyAI configuration."""
     state: AppState = ctx.obj
     prompts = InteractivePrompts()
 
     if state.is_debug():
-        console.print("[dim]Starting setup wizard...[/dim]")
+        console.print("[dim]Starting installation wizard...[/dim]")
 
     try:
         # Welcome message
         welcome_text = Text()
         welcome_text.append("Welcome to MyAI! ", style="bold cyan")
         welcome_text.append("🤖\n\n", style="cyan")
-        welcome_text.append("This wizard will help you set up your AI agent management system.\n")
+        welcome_text.append("This wizard will help you install and configure your AI agent management system.\n")
         welcome_text.append("You can exit at any time by pressing Ctrl+C.")
 
         welcome_panel = Panel(
             welcome_text,
-            title="🚀 MyAI Setup Wizard",
+            title="🚀 MyAI Installation Wizard",
             border_style="cyan",
             padding=(1, 2),
         )
         console.print(welcome_panel)
 
         if quick:
-            console.print("\n[yellow]Quick setup mode - using defaults...[/yellow]")
-            setup_data = _get_quick_setup_defaults()
+            console.print("\n[yellow]Quick installation mode - using defaults...[/yellow]")
+            install_data = _get_quick_install_defaults()
         else:
             # Show progress
             steps = [
                 "Basic Configuration",
-                "Directory Setup",
+                "Directory Installation",
                 "Tool Preferences",
                 "Create First Agent",
-                "Finalize Setup",
+                "Finalize Installation",
             ]
-            prompts.progress_steps("MyAI Setup", steps, 0)
+            prompts.progress_steps("MyAI Installation", steps, 0)
 
-            setup_data = _run_interactive_setup(prompts)
+            install_data = _run_interactive_install(prompts)
 
         # Apply configuration
         console.print("\n[dim]Applying configuration...[/dim]")
-        _apply_setup_configuration(setup_data)
+        _apply_install_configuration(install_data)
 
         # Success message
         success_text = Text()
-        success_text.append("🎉 Setup Complete!\n\n", style="bold green")
+        success_text.append("🎉 Installation Complete!\n\n", style="bold green")
         success_text.append("MyAI has been configured successfully. Here's what you can do next:\n\n")
         success_text.append("• Run ", style="dim")
         success_text.append("myai agent list", style="bold cyan")
@@ -97,7 +97,7 @@ def setup(
         console.print(success_panel)
 
     except Exception as e:
-        console.print(f"[red]Setup failed: {e}[/red]")
+        console.print(f"[red]Installation failed: {e}[/red]")
         if state.is_debug():
             raise
 
@@ -117,7 +117,13 @@ def agent(ctx: typer.Context):
         console.print("Let's create a new AI agent together!\n")
 
         # Show progress
-        steps = ["Agent Type Selection", "Basic Information", "Configuration", "Content Setup", "Review & Create"]
+        steps = [
+            "Agent Type Selection",
+            "Basic Information",
+            "Configuration",
+            "Content Configuration",
+            "Review & Create",
+        ]
         prompts.progress_steps("Agent Creation", steps, 0)
 
         # Step 1: Choose agent type
@@ -198,9 +204,9 @@ def agent(ctx: typer.Context):
         )
         tags = [tag.strip() for tag in tag_input.split(",") if tag.strip()]
 
-        # Step 4: Content setup
+        # Step 4: Content configuration
         prompts.progress_steps("Agent Creation", steps, 3)
-        console.print("\n[bold]Step 4: Content Setup[/bold]")
+        console.print("\n[bold]Step 4: Content Configuration[/bold]")
 
         if agent_type == choices[0]:  # Custom agent
             content = prompts.text_input(
@@ -387,7 +393,7 @@ def troubleshoot(ctx: typer.Context):
     try:
         # Welcome
         console.print("\n[bold cyan]🔧 Troubleshooting Wizard[/bold cyan]\n")
-        console.print("Let's diagnose and fix any issues with your MyAI setup.\n")
+        console.print("Let's diagnose and fix any issues with your MyAI installation.\n")
 
         # Step 1: What's the problem?
         problem_categories = [
@@ -395,7 +401,7 @@ def troubleshoot(ctx: typer.Context):
             "Configuration issues",
             "Tool integration problems",
             "Performance issues",
-            "Installation/setup problems",
+            "Installation/configuration problems",
             "Other",
         ]
 
@@ -404,7 +410,7 @@ def troubleshoot(ctx: typer.Context):
             "Configuration not loading or merging correctly",
             "Claude, Cursor, or other tool integration failing",
             "MyAI running slowly or using too much memory",
-            "Problems with initial setup or installation",
+            "Problems with initial installation or configuration",
             "Something else not covered above",
         ]
 
@@ -431,7 +437,7 @@ def troubleshoot(ctx: typer.Context):
                 console.print("\n[dim]Applying fixes...[/dim]")
                 _apply_fixes(issues_found)
                 console.print("✅ [green]Fixes applied![/green]")
-                console.print("\nPlease test your setup and run this wizard again if problems persist.")
+                console.print("\nPlease test your installation and run this wizard again if problems persist.")
 
     except Exception as e:
         console.print(f"[red]Troubleshooting failed: {e}[/red]")
@@ -442,8 +448,8 @@ def troubleshoot(ctx: typer.Context):
 # Helper functions
 
 
-def _get_quick_setup_defaults() -> Dict[str, Any]:
-    """Get default configuration for quick setup."""
+def _get_quick_install_defaults() -> Dict[str, Any]:
+    """Get default configuration for quick installation."""
     return {
         "user_name": "MyAI User",
         "user_email": "",
@@ -454,37 +460,49 @@ def _get_quick_setup_defaults() -> Dict[str, Any]:
     }
 
 
-def _run_interactive_setup(prompts: InteractivePrompts) -> Dict[str, Any]:
-    """Run the interactive setup process."""
-    setup_data: Dict[str, Any] = {}
+def _run_interactive_install(prompts: InteractivePrompts) -> Dict[str, Any]:
+    """Run the interactive installation process."""
+    install_data: Dict[str, Any] = {}
 
     # Basic configuration
     console.print("\n[bold]Basic Configuration[/bold]")
-    setup_data["user_name"] = prompts.text_input("Your name", default="MyAI User")
-    setup_data["user_email"] = prompts.text_input(
+    install_data["user_name"] = prompts.text_input("Your name", default="MyAI User")
+    install_data["user_email"] = prompts.text_input(
         "Email (optional)",
         default="",
         validator=lambda x: not x or validate_email(x),
         error_message="Please enter a valid email address",
     )
 
-    # Directory setup
+    # Directory installation
     prompts.progress_steps(
-        "MyAI Setup",
-        ["Basic Configuration", "Directory Setup", "Tool Preferences", "Create First Agent", "Finalize Setup"],
+        "MyAI Installation",
+        [
+            "Basic Configuration",
+            "Directory Installation",
+            "Tool Preferences",
+            "Create First Agent",
+            "Finalize Installation",
+        ],
         1,
     )
-    console.print("\n[bold]Directory Setup[/bold]")
+    console.print("\n[bold]Directory Installation[/bold]")
 
     default_dir = str(Path.home() / ".myai")
-    setup_data["base_directory"] = prompts.text_input(
+    install_data["base_directory"] = prompts.text_input(
         "MyAI base directory", default=default_dir, description="Where MyAI will store agents and configurations"
     )
 
     # Tool preferences
     prompts.progress_steps(
-        "MyAI Setup",
-        ["Basic Configuration", "Directory Setup", "Tool Preferences", "Create First Agent", "Finalize Setup"],
+        "MyAI Installation",
+        [
+            "Basic Configuration",
+            "Directory Installation",
+            "Tool Preferences",
+            "Create First Agent",
+            "Finalize Installation",
+        ],
         2,
     )
     console.print("\n[bold]Tool Preferences[/bold]")
@@ -500,34 +518,40 @@ def _run_interactive_setup(prompts: InteractivePrompts) -> Dict[str, Any]:
     selected_tools = prompts.multi_selection(
         "Select tools you want to integrate with", available_tools, tool_descriptions, min_selections=1
     )
-    setup_data["default_tools"] = selected_tools
+    install_data["default_tools"] = selected_tools
 
     # Additional options
     prompts.progress_steps(
-        "MyAI Setup",
-        ["Basic Configuration", "Directory Setup", "Tool Preferences", "Create First Agent", "Finalize Setup"],
+        "MyAI Installation",
+        [
+            "Basic Configuration",
+            "Directory Installation",
+            "Tool Preferences",
+            "Create First Agent",
+            "Finalize Installation",
+        ],
         3,
     )
     console.print("\n[bold]Additional Options[/bold]")
 
     auto_sync = prompts.confirmation("Enable automatic synchronization?", default=False)
     create_sample = prompts.confirmation("Create a sample agent to get started?", default=True)
-    setup_data["auto_sync"] = auto_sync
-    setup_data["create_sample_agent"] = create_sample
+    install_data["auto_sync"] = auto_sync
+    install_data["create_sample_agent"] = create_sample
 
-    return setup_data
+    return install_data
 
 
-def _apply_setup_configuration(setup_data: Dict[str, Any]) -> None:
-    """Apply the setup configuration."""
+def _apply_install_configuration(install_data: Dict[str, Any]) -> None:
+    """Apply the installation configuration."""
     # Create base directory
-    base_dir = Path(setup_data["base_directory"])
+    base_dir = Path(install_data["base_directory"])
     base_dir.mkdir(parents=True, exist_ok=True)
     (base_dir / "agents").mkdir(exist_ok=True)
     (base_dir / "config").mkdir(exist_ok=True)
 
     # Create sample agent if requested
-    if setup_data.get("create_sample_agent"):
+    if install_data.get("create_sample_agent"):
         manager = AgentManager()
         try:
             _ = manager.create_agent_basic(
@@ -535,7 +559,7 @@ def _apply_setup_configuration(setup_data: Dict[str, Any]) -> None:
                 display_name="Welcome Agent",
                 description="A sample agent to help you get started with MyAI",
                 category=AgentCategory.CUSTOM,
-                tools=setup_data["default_tools"],
+                tools=install_data["default_tools"],
                 tags=["sample", "welcome"],
             )
             # Update content
@@ -595,8 +619,8 @@ def _run_diagnostics(problem_type: str) -> List[str]:
         except Exception:
             issues.append("Configuration manager not accessible")
 
-    elif problem_type == "Installation/setup problems":
-        # Check basic setup
+    elif problem_type == "Installation/configuration problems":
+        # Check basic installation
         myai_dir = Path.home() / ".myai"
         if not myai_dir.exists():
             issues.append("MyAI directory not found")

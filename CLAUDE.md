@@ -1,7 +1,7 @@
 # MyAI Integration Status - UPDATED
 
-## Comprehensive Setup Command
-**New**: `myai setup all-setup` now provides complete setup:
+## Comprehensive Install Command
+**New**: `myai install all` now provides complete setup:
 1. Sets up global `~/.myai` directory with all default agents
 2. Creates and configures `~/.claude` directory with agents
 3. Creates project-level `.claude` directory with configuration
@@ -23,10 +23,9 @@
 - Run from within project directory
 
 ## MyAI Commands
-- `myai setup all-setup` - Complete setup (global + project)
+- `myai install all` - Complete installation (global + project)
 - `myai agent list` - List all available agents
-- `myai integration sync` - Sync agents to integrations
-- `myai integration health` - Check integration status
+- `myai system integration-health` - Check integration status
 
 ## Agent-OS Integration
 **New**: MyAI now includes full Agent-OS integration for structured AI-driven development:
@@ -44,7 +43,7 @@ Agent-OS provides structured workflows for:
 - **execute-tasks** - Execute development tasks following standards
 
 ## What Gets Created
-After running `myai setup all-setup`:
+After running `myai install all`:
 ```
 ~/.myai/
 ├── agents/           # Default agents copied here

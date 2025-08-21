@@ -1,17 +1,18 @@
 """
-System utility CLI commands.
+System management CLI commands.
 
-This module provides CLI commands for system status, diagnostics,
-and maintenance operations.
+This module provides CLI commands for system utilities, integration management,
+diagnostics, and maintenance operations.
 """
 
+import asyncio
 import platform
 import shutil
 import sys
 import tarfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import typer
 from rich.console import Console
@@ -23,10 +24,12 @@ from myai.agent.registry import get_agent_registry
 from myai.cli.formatters import get_formatter
 from myai.cli.state import AppState
 from myai.config.manager import get_config_manager
+from myai.integrations import IntegrationManager
 
 # Create system command group
-app = typer.Typer(help="🔧 System utilities and diagnostics")
+app = typer.Typer(help="🔧 System utilities, integrations, and diagnostics")
 console = Console()
+
 
 # Constants
 MAX_DISPLAY_ITEMS = 3
@@ -589,3 +592,382 @@ def _format_size(size_bytes: int) -> str:
             return f"{size:.1f} {unit}"
         size /= BYTES_PER_KB
     return f"{size:.1f} TB"
+
+
+def run_async(coro):
+    """Helper to run async functions in sync CLI commands."""
+    return asyncio.run(coro)
+
+
+# Integration management commands
+@app.command(name="integration-list")
+def list_integrations(
+    ctx: typer.Context,
+    available: bool = typer.Option(False, "--available", help="Show available integrations"),  # noqa: FBT001
+    status: bool = typer.Option(True, "--status", help="Show integration status"),  # noqa: FBT001
+):
+    """List available and active integrations."""
+    state: AppState = ctx.obj
+
+    if state.is_debug():
+        console.print("[dim]Loading integrations...[/dim]")
+
+    try:
+        manager = IntegrationManager()
+
+        if available:
+            # Show available integrations (discovery)
+            from myai.integrations.factory import get_adapter_factory
+
+            factory = get_adapter_factory()
+
+            console.print("🔍 [bold cyan]Discovering available integrations...[/bold cyan]")
+            discovered = run_async(factory.discover_adapters())
+
+            if not discovered:
+                console.print("[dim]No integrations found[/dim]")
+                return
+
+            # Create table
+            table = Table(title="🔗 Available Integrations", show_header=True, header_style="bold magenta")
+            table.add_column("Name", style="cyan", no_wrap=True)
+            table.add_column("Display Name", style="white")
+            table.add_column("Status", style="green")
+            table.add_column("Version", style="dim")
+            table.add_column("Path", style="dim")
+
+            for name, info in discovered.items():
+                if "error" in info:
+                    status_text = f"[red]Error: {info['error']}[/red]"
+                    version = "N/A"
+                    path = "N/A"
+                else:
+                    status_text = f"[green]{info['status']}[/green]"
+                    version = info.get("tool_version", "unknown")
+                    path = info.get("installation_path", "unknown")
+
+                table.add_row(
+                    name,
+                    info.get("display_name", name),
+                    status_text,
+                    version,
+                    path,
+                )
+
+            console.print(table)
+
+        if status:
+            # Show active integration status
+            active_adapters = manager.list_adapters()
+
+            if not active_adapters:
+                console.print("[dim]No active integrations[/dim]")
+                return
+
+            console.print("📊 [bold cyan]Getting integration status...[/bold cyan]")
+            status_info = run_async(manager.get_adapter_status())
+
+            # Create status table
+            table = Table(title="📊 Integration Status", show_header=True, header_style="bold magenta")
+            table.add_column("Name", style="cyan", no_wrap=True)
+            table.add_column("Status", style="white")
+            table.add_column("Tool", style="green")
+            table.add_column("Version", style="dim")
+            table.add_column("Last Sync", style="dim")
+
+            for name, info in status_info.items():
+                if "error" in info:
+                    status_text = f"[red]Error: {info['error']}[/red]"
+                    tool_name = "Unknown"
+                    version = "N/A"
+                    last_sync = "N/A"
+                else:
+                    status_color = {
+                        "configured": "green",
+                        "connected": "green",
+                        "available": "yellow",
+                        "error": "red",
+                        "disabled": "dim",
+                    }.get(info["status"], "white")
+                    status_text = f"[{status_color}]{info['status']}[/{status_color}]"
+                    tool_name = info.get("tool_name", "Unknown")
+                    version = info.get("tool_version", "unknown")
+                    last_sync = info.get("last_sync", "never")
+
+                table.add_row(name, status_text, tool_name, version, last_sync)
+
+            console.print(table)
+
+    except Exception as e:
+        console.print(f"[red]Error listing integrations: {e}[/red]")
+        if state.is_debug():
+            raise
+
+
+@app.command(name="integration-health")
+def integration_health(
+    ctx: typer.Context,
+    integration: Optional[str] = typer.Argument(None, help="Specific integration to check"),
+):
+    """Perform health checks on integrations."""
+    state: AppState = ctx.obj
+
+    if state.is_debug():
+        console.print("[dim]Running health checks...[/dim]")
+
+    try:
+        manager = IntegrationManager()
+
+        # Initialize integrations first
+        if state.is_debug():
+            console.print("[dim]Initializing integrations...[/dim]")
+        run_async(manager.initialize())
+
+        if integration:
+            # Check specific integration
+            if integration not in manager.list_adapters():
+                console.print(f"[red]Integration '{integration}' not found or not active[/red]")
+                return
+
+            console.print(f"🔍 Checking health of {integration}...")
+            health_info = run_async(manager.health_check(integration))
+
+            _display_health_results({integration: health_info[integration]})
+        else:
+            # Check all integrations
+            console.print("🔍 Checking health of all integrations...")
+            health_info = run_async(manager.health_check())
+
+            if not health_info:
+                console.print("[dim]No active integrations to check[/dim]")
+                return
+
+            _display_health_results(health_info)
+
+    except Exception as e:
+        console.print(f"[red]Error during health check: {e}[/red]")
+        if state.is_debug():
+            raise
+
+
+def _display_health_results(health_info: dict):
+    """Display health check results in a formatted way."""
+    for adapter_name, health in health_info.items():
+        # Determine overall status color
+        status = health.get("status", "unknown")
+        status_color = {
+            "healthy": "green",
+            "unhealthy": "red",
+            "warning": "yellow",
+        }.get(status, "white")
+
+        # Create health panel
+        health_text = Text()
+        health_text.append("Status: ", style="bold")
+        health_text.append(f"{status}\n", style=f"bold {status_color}")
+        health_text.append(f"Timestamp: {health.get('timestamp', 'unknown')}\n")
+
+        # Add check details
+        checks = health.get("checks", {})
+        if checks:
+            health_text.append("\nChecks:\n", style="bold")
+            for check_name, check_info in checks.items():
+                check_status = check_info.get("status", "unknown")
+                check_color = {
+                    "pass": "green",
+                    "fail": "red",
+                    "warning": "yellow",
+                }.get(check_status, "white")
+
+                health_text.append(f"  • {check_name}: ", style="dim")
+                health_text.append(f"{check_status}", style=check_color)
+
+                if "message" in check_info:
+                    health_text.append(f" - {check_info['message']}", style="dim")
+                health_text.append("\n")
+
+        # Add errors and warnings
+        errors = health.get("errors", [])
+        warnings = health.get("warnings", [])
+
+        if errors:
+            health_text.append("\nErrors:\n", style="bold red")
+            for error in errors:
+                health_text.append(f"  • {error}\n", style="red")
+
+        if warnings:
+            health_text.append("\nWarnings:\n", style="bold yellow")
+            for warning in warnings:
+                health_text.append(f"  • {warning}\n", style="yellow")
+
+        panel = Panel(
+            health_text,
+            title=f"🔍 Health Check: {adapter_name}",
+            border_style=status_color,
+        )
+        console.print(panel)
+
+
+@app.command(name="integration-import")
+def import_agents(
+    ctx: typer.Context,
+    integration: Optional[List[str]] = typer.Option(
+        None, "--integration", "-i", help="Specific integration(s) to import from"
+    ),
+    backup: bool = typer.Option(True, "--backup/--no-backup", help="Create backup before import"),  # noqa: FBT001
+    merge: bool = typer.Option(True, "--merge/--replace", help="Merge with existing agents"),  # noqa: FBT001
+):
+    """Import agents from tool integrations."""
+    state: AppState = ctx.obj
+
+    if state.is_debug():
+        console.print("[dim]Importing agents...[/dim]")
+
+    try:
+        manager = IntegrationManager()
+
+        if integration:
+            # Validate specified integrations
+            active_adapters = manager.list_adapters()
+            invalid_integrations = [i for i in integration if i not in active_adapters]
+
+            if invalid_integrations:
+                console.print(f"[red]Invalid integrations: {', '.join(invalid_integrations)}[/red]")
+                return
+
+        console.print("📥 Importing agents from integrations...")
+
+        # Create backup if requested
+        if backup:
+            console.print("[dim]Creating backup...[/dim]")
+            backup_results = run_async(manager.backup_configurations(integration))
+            backup_count = sum(1 for path in backup_results.values() if path is not None)
+            console.print(f"✅ Created {backup_count} backups")
+
+        # Import agents
+        imported = run_async(manager.import_agents(integration))
+
+        # Display results
+        total_imported = 0
+        for adapter_name, agents in imported.items():
+            count = len(agents)
+            total_imported += count
+            console.print(f"  • {adapter_name}: {count} agents")
+
+            if state.is_debug() and agents:
+                preview_limit = 3  # Number of agents to preview
+                for agent in agents[:preview_limit]:
+                    console.print(f"    - {agent.get('name', 'unnamed')}")
+                if len(agents) > preview_limit:
+                    console.print(f"    ... and {len(agents) - preview_limit} more")
+
+        if total_imported == 0:
+            console.print("[dim]No agents imported[/dim]")
+        else:
+            console.print(f"✅ [green]Imported {total_imported} agents successfully[/green]")
+
+            if merge:
+                console.print("[dim]Use 'myai agent list' to see imported agents[/dim]")
+
+    except Exception as e:
+        console.print(f"[red]Error importing agents: {e}[/red]")
+        if state.is_debug():
+            raise
+
+
+@app.command(name="integration-validate")
+def validate_integrations(
+    ctx: typer.Context,
+    integration: Optional[str] = typer.Argument(None, help="Specific integration to validate"),
+):
+    """Validate integration configurations."""
+    state: AppState = ctx.obj
+
+    if state.is_debug():
+        console.print("[dim]Validating configurations...[/dim]")
+
+    try:
+        manager = IntegrationManager()
+
+        if integration:
+            integrations_to_validate = [integration]
+        else:
+            integrations_to_validate = manager.list_adapters()
+
+        if not integrations_to_validate:
+            console.print("[dim]No integrations to validate[/dim]")
+            return
+
+        console.print("✅ Validating integration configurations...")
+
+        results = run_async(manager.validate_configurations(integrations_to_validate))
+
+        # Display results
+        has_errors = False
+        for adapter_name, errors in results.items():
+            if errors:
+                has_errors = True
+                console.print(f"❌ [red]{adapter_name}[/red]:")
+                for error in errors:
+                    console.print(f"  • {error}")
+            else:
+                console.print(f"✅ [green]{adapter_name}[/green]: Configuration valid")
+
+        if not has_errors:
+            console.print("[green]All configurations are valid![/green]")
+
+    except Exception as e:
+        console.print(f"[red]Error validating configurations: {e}[/red]")
+        if state.is_debug():
+            raise
+
+
+@app.command(name="integration-backup")
+def backup_integrations(
+    ctx: typer.Context,
+    integration: Optional[List[str]] = typer.Option(
+        None, "--integration", "-i", help="Specific integration(s) to backup"
+    ),
+    backup_dir: Optional[Path] = typer.Option(None, "--backup-dir", help="Custom backup directory"),
+):
+    """Create backups of integration configurations."""
+    _ = backup_dir  # Mark as intentionally unused for now
+    state: AppState = ctx.obj
+
+    if state.is_debug():
+        console.print("[dim]Creating backups...[/dim]")
+
+    try:
+        manager = IntegrationManager()
+
+        if integration:
+            # Validate specified integrations
+            active_adapters = manager.list_adapters()
+            invalid_integrations = [i for i in integration if i not in active_adapters]
+
+            if invalid_integrations:
+                console.print(f"[red]Invalid integrations: {', '.join(invalid_integrations)}[/red]")
+                return
+
+        console.print("💾 Creating configuration backups...")
+
+        results = run_async(manager.backup_configurations(integration))
+
+        # Display results
+        success_count = 0
+        for adapter_name, backup_path in results.items():
+            if backup_path:
+                success_count += 1
+                console.print(f"✅ {adapter_name}: {backup_path}")
+            else:
+                console.print(f"❌ {adapter_name}: Backup failed")
+
+        if success_count == 0:
+            console.print("[red]No backups created[/red]")
+        else:
+            console.print(f"✅ [green]Created {success_count} backups successfully[/green]")
+
+    except Exception as e:
+        console.print(f"[red]Error creating backups: {e}[/red]")
+        if state.is_debug():
+            raise

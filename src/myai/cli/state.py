@@ -6,20 +6,15 @@ including configuration options and runtime settings.
 """
 
 from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 
 @dataclass
 class AppState:
     """Global application state for CLI commands."""
 
-    # Debug and logging options
+    # Debug option
     debug: bool = False
-    verbose: bool = False
-
-    # Configuration options
-    config_path: Optional[Path] = None
 
     # Output formatting
     output_format: str = "table"  # table, json
@@ -32,8 +27,8 @@ class AppState:
         return self.debug
 
     def is_verbose(self) -> bool:
-        """Check if verbose mode is enabled."""
-        return self.verbose or self.debug
+        """Check if verbose mode is enabled (alias for debug)."""
+        return self.debug
 
     def set_context(self, key: str, value: Any) -> None:
         """Set context value."""

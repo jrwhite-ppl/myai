@@ -3,7 +3,7 @@ Full setup integration test that mirrors real user workflow.
 
 This test simulates the exact workflow:
 1. myai setup uninstall --all --force
-2. myai setup all-setup
+2. myai setup all
 3. Verify all expected directories and files are created correctly
 """
 
@@ -16,11 +16,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from typer.testing import CliRunner
 
-from myai.commands.setup_cli import app
+from myai.app import create_app
+from myai.commands.install_cli import app
 
 
 class TestFullSetupIntegration(unittest.TestCase):
-    """Test the complete uninstall -> all-setup workflow."""
+    """Test the complete uninstall -> all workflow."""
 
     def setUp(self):
         """Set up test environment."""
@@ -66,14 +67,14 @@ class TestFullSetupIntegration(unittest.TestCase):
         if self.test_dir.exists():
             shutil.rmtree(self.test_dir)
 
-    @patch("myai.commands.setup_cli.Path.home")
-    @patch("myai.commands.setup_cli.Path.cwd")
-    @patch("myai.commands.setup_cli.get_config_manager")
+    @patch("myai.commands.install_cli.Path.home")
+    @patch("myai.commands.install_cli.Path.cwd")
+    @patch("myai.commands.install_cli.get_config_manager")
     def test_full_uninstall_and_setup_workflow(self, mock_config_manager, mock_cwd, mock_home):
         """
         Test the complete workflow:
         1. uninstall --all --force
-        2. all-setup
+        2. all
         3. Verify all expected structures are created
         """
         # Setup mocks
@@ -158,11 +159,12 @@ class TestFullSetupIntegration(unittest.TestCase):
                 # Mock the package file path
                 with patch("myai.__file__", str(self.test_package / "__init__.py")):
                     # STEP 1: Run uninstall --all --force (should be no-op on fresh environment)
-                    uninstall_result = self.runner.invoke(app, ["uninstall", "--all", "--force"])
+                    main_app = create_app()
+                    uninstall_result = self.runner.invoke(main_app, ["uninstall", "--all", "--force"])
                     self.assertEqual(uninstall_result.exit_code, 0, f"Uninstall failed:\n{uninstall_result.stdout}")
 
-                    # STEP 2: Run all-setup
-                    setup_result = self.runner.invoke(app, ["all-setup"])
+                    # STEP 2: Run all
+                    setup_result = self.runner.invoke(app, ["all"])
                     self.assertEqual(setup_result.exit_code, 0, f"Setup failed:\n{setup_result.stdout}")
 
                     # STEP 3: Verify ~/.myai directory structure

@@ -6,7 +6,6 @@ output formatting, and global options.
 """
 
 from pathlib import Path
-from typing import Optional
 
 import typer
 from rich.console import Console
@@ -18,7 +17,7 @@ from myai.__about__ import __version__
 
 # from myai.cli.formatters import get_formatter  # Currently unused
 from myai.cli.state import AppState
-from myai.commands import agent_cli, config_cli, integration_cli, setup_cli, system_cli, wizard_cli
+from myai.commands import agent_cli, config_cli, install_cli, system_cli, uninstall_cli, wizard_cli
 
 # Create the main Typer application
 app = typer.Typer(
@@ -40,11 +39,8 @@ state = AppState()
 @app.callback()
 def main_callback(
     ctx: typer.Context,
-    debug: bool = typer.Option(False, "--debug", "-d", help="Enable debug output"),  # noqa: FBT001
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),  # noqa: FBT001
-    config_path: Optional[Path] = typer.Option(None, "--config", "-c", help="Custom config file path"),
-    output_format: str = typer.Option("table", "--output", "-o", help="Output format (table, json)"),
-    no_color: bool = typer.Option(False, "--no-color", help="Disable colored output"),  # noqa: FBT001
+    debug: bool = typer.Option(False, "--debug", "-d", help="Enable debug mode with detailed output"),  # noqa: FBT001
+    output: str = typer.Option("table", "--output", "-o", help="Output format (table, json)"),
 ):
     """
     🤖 MyAI - AI Agent and Configuration Management CLI
@@ -53,13 +49,7 @@ def main_callback(
     """
     # Update global state
     state.debug = debug
-    state.verbose = verbose
-    state.config_path = config_path
-    state.output_format = output_format
-
-    # Configure console
-    if no_color:
-        console._color_system = None
+    state.output_format = output
 
     if debug:
         console.print("[dim]Debug mode enabled[/dim]")
@@ -198,14 +188,14 @@ def status(ctx: typer.Context):
                 claude_count = len(list(claude_path.glob("*.md")))
                 status_table.add_row("Claude Integration", "✅ OK", f"{claude_count} agents synced")
             else:
-                status_table.add_row("Claude Integration", "❌ Not Setup", "Run 'myai setup all-setup'")
+                status_table.add_row("Claude Integration", "❌ Not Setup", "Run 'myai install all'")
 
             cursor_path = Path.cwd() / ".cursor" / "rules"
             if cursor_path.exists():
                 cursor_count = len(list(cursor_path.glob("*.mdc")))
                 status_table.add_row("Cursor Integration", "✅ OK", f"{cursor_count} rules active")
             else:
-                status_table.add_row("Cursor Integration", "❌ Not Setup", "Run 'myai setup all-setup'")
+                status_table.add_row("Cursor Integration", "❌ Not Setup", "Run 'myai install all'")
 
             console.print(status_table)
 
@@ -215,17 +205,22 @@ def status(ctx: typer.Context):
             raise
 
 
-def main():
-    """Main entry point for the CLI application."""
+def create_app():
+    """Create and configure the main application."""
     # Add command groups
-    app.add_typer(setup_cli.app, name="setup", help="🛠️  Setup and initialization commands")
+    app.add_typer(install_cli.app, name="install", help="📦 Installation and configuration commands")
+    app.add_typer(uninstall_cli.app, name="uninstall", help="🗑️ Uninstall MyAI components")
     app.add_typer(config_cli.app, name="config", help="📝 Configuration management commands")
     app.add_typer(agent_cli.app, name="agent", help="🤖 Agent management commands")
-    app.add_typer(integration_cli.app, name="integration", help="🔗 Tool integration management commands")
-    app.add_typer(system_cli.app, name="system", help="🔧 System utilities and diagnostics")
+    app.add_typer(system_cli.app, name="system", help="🔧 System utilities, integrations, and diagnostics")
     app.add_typer(wizard_cli.app, name="wizard", help="🧙 Interactive wizards and guided workflows")
+    return app
 
-    # Launch the application
+
+def main():
+    """Main entry point for the CLI application."""
+    # Create and launch the application
+    app = create_app()
     app()
 
 

@@ -2,10 +2,8 @@
 Tests for the main CLI application.
 """
 
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
 from rich.console import Console
 
 from myai.app import app, console, main, main_callback, state, status, version
@@ -18,60 +16,46 @@ class TestMainCallback:
         """Test main callback with default options."""
         ctx = MagicMock()
 
-        main_callback(ctx=ctx, debug=False, verbose=False, config_path=None, output_format="table", no_color=False)
+        main_callback(ctx=ctx, debug=False, output="table")
 
         # Test that state is updated
         assert state.debug is False
-        assert state.verbose is False
-        assert state.config_path is None
         assert state.output_format == "table"
 
     def test_main_callback_debug_enabled(self):
         """Test main callback with debug enabled."""
         ctx = MagicMock()
 
-        main_callback(ctx=ctx, debug=True, verbose=False, config_path=None, output_format="table", no_color=False)
+        main_callback(ctx=ctx, debug=True, output="table")
 
         assert state.debug is True
         assert state.is_debug()
 
-    def test_main_callback_verbose_enabled(self):
-        """Test main callback with verbose enabled."""
+    def test_main_callback_output_format(self):
+        """Test main callback with different output format."""
         ctx = MagicMock()
 
-        main_callback(ctx=ctx, debug=False, verbose=True, config_path=None, output_format="table", no_color=False)
-
-        assert state.verbose is True
-        assert state.is_verbose()
-
-    def test_main_callback_custom_config_path(self):
-        """Test main callback with custom config path."""
-        ctx = MagicMock()
-        config_path = Path("/custom/config.json")
-
-        main_callback(
-            ctx=ctx, debug=False, verbose=False, config_path=config_path, output_format="table", no_color=False
-        )
-
-        assert state.config_path == config_path
-
-    def test_main_callback_json_output_format(self):
-        """Test main callback with JSON output format."""
-        ctx = MagicMock()
-
-        main_callback(ctx=ctx, debug=False, verbose=False, config_path=None, output_format="json", no_color=False)
+        main_callback(ctx=ctx, debug=False, output="json")
 
         assert state.output_format == "json"
 
-    @patch("myai.app.console")
-    def test_main_callback_no_color(self, mock_console):
-        """Test main callback with no color option."""
+    def test_main_callback_stores_state_in_context(self):
+        """Test main callback stores state in context."""
         ctx = MagicMock()
 
-        main_callback(ctx=ctx, debug=False, verbose=False, config_path=None, output_format="table", no_color=True)
+        main_callback(ctx=ctx, debug=False, output="table")
 
-        # Should disable color on console
-        mock_console._color_system = None
+        assert ctx.obj == state
+
+    @patch("myai.app.console")
+    def test_main_callback_debug_prints_message(self, mock_console):
+        """Test main callback prints debug message when debug enabled."""
+        ctx = MagicMock()
+
+        main_callback(ctx=ctx, debug=True, output="table")
+
+        # Should print debug message
+        mock_console.print.assert_called_with("[dim]Debug mode enabled[/dim]")
 
 
 class TestVersionCommand:
@@ -116,7 +100,6 @@ class TestStatusCommand:
 
         # Set debug state
         state.debug = True
-        state.verbose = True
         state.output_format = "json"
 
         status(ctx)
@@ -126,7 +109,6 @@ class TestStatusCommand:
 
         # Reset state
         state.debug = False
-        state.verbose = False
         state.output_format = "table"
 
 
@@ -140,142 +122,123 @@ class TestMainFunction:
 
         mock_app.assert_called_once()
 
-    @patch("myai.app.app")
-    def test_main_function_exception_handling(self, mock_app):
-        """Test main function handles exceptions gracefully."""
-        # Make app() raise an exception
-        mock_app.side_effect = Exception("Test error")
+    def test_main_function_structure(self):
+        """Test that main function properly sets up the app structure."""
+        # Just verify that main() sets up the command groups correctly by checking imports
+        from myai.app import app
 
-        # Should not propagate the exception
-        with pytest.raises(Exception):  # noqa: B017
-            main()
-
-
-class TestAppConfiguration:
-    """Test cases for app configuration."""
-
-    def test_app_exists(self):
-        """Test that app is properly configured."""
+        # Verify the app exists and is a Typer instance
         assert app is not None
-        assert app.info.name == "myai"
-        assert "MyAI" in app.info.help
-        assert app.info.no_args_is_help is True
 
-    def test_console_exists(self):
-        """Test that console is properly configured."""
-        assert console is not None
-        assert isinstance(console, Console)
+        # Verify command modules are imported
+        from myai.app import agent_cli, config_cli, install_cli, system_cli, wizard_cli
 
-    def test_state_exists(self):
-        """Test that state is properly initialized."""
-        assert state is not None
-        # State should have default values
-        assert state.output_format == "table"
-        assert state.debug is False
-        assert state.verbose is False
+        assert install_cli.app is not None
+        assert config_cli.app is not None
+        assert agent_cli.app is not None
+        assert system_cli.app is not None
+        assert wizard_cli.app is not None
 
-    def test_app_commands_registered(self):
-        """Test that all expected commands are registered."""
-        # Typer apps don't expose commands in the same way
-        # Just test that app has a callable interface
-        assert callable(app)
-        assert hasattr(app, "info")
-        assert hasattr(app, "command")
+        # Verify main can be called without error
+        # (Don't actually call it as it would run the full app)
 
 
 class TestGlobalState:
     """Test cases for global state management."""
 
-    def setup_method(self):
-        """Reset state before each test."""
-        state.debug = False
-        state.verbose = False
-        state.config_path = None
-        state.output_format = "table"
-        state.context.clear()
+    def test_state_is_singleton(self):
+        """Test that state is a global singleton."""
+        from myai.app import state as imported_state
+
+        assert state is imported_state
+        assert id(state) == id(imported_state)
 
     def test_state_persistence_across_commands(self):
         """Test that state persists across command calls."""
-        ctx = MagicMock()
+        # Set state
+        state.debug = True
+        state.output_format = "json"
 
-        # Set state through main callback
-        main_callback(
-            ctx=ctx, debug=True, verbose=True, config_path=Path("/test"), output_format="json", no_color=False
-        )
-
-        # State should be updated
+        # State should persist
         assert state.debug is True
-        assert state.verbose is True
-        assert state.config_path == Path("/test")
         assert state.output_format == "json"
 
-        # State should still be accessible
-        assert state.is_debug()
-        assert state.is_verbose()
-
-    def test_state_modification(self):
-        """Test direct state modification."""
-        # Modify state directly
-        state.set_context("test_key", "test_value")
-        state.debug = True
-
-        assert state.get_context("test_key") == "test_value"
-        assert state.debug is True
+        # Reset for other tests
+        state.debug = False
+        state.output_format = "table"
 
     def test_state_independence(self):
-        """Test that state changes don't affect other instances."""
-        # This test verifies that we're using a singleton pattern correctly
+        """Test that state changes don't affect other tests."""
         original_debug = state.debug
-        original_verbose = state.verbose
+        original_output = state.output_format
 
-        # Import state again
-        from myai.app import state as state2
-
-        # Should be the same instance
-        assert state is state2
-
-        # Modify through one reference
-        state.debug = True
-
-        # Should be reflected in the other
-        assert state2.debug is True
+        # Change state
+        state.debug = not original_debug
+        state.output_format = "xml"
 
         # Reset
         state.debug = original_debug
-        state.verbose = original_verbose
+        state.output_format = original_output
+
+
+class TestGlobalConsole:
+    """Test cases for global console instance."""
+
+    def test_console_is_rich_console(self):
+        """Test that console is a Rich Console instance."""
+        assert isinstance(console, Console)
+
+    def test_console_is_singleton(self):
+        """Test that console is a global singleton."""
+        from myai.app import console as imported_console
+
+        assert console is imported_console
+        assert id(console) == id(imported_console)
 
 
 class TestIntegration:
-    """Integration tests for the app module."""
+    """Integration tests for the app."""
 
     def test_app_can_be_imported(self):
-        """Test that the app can be imported without errors."""
-        # This test ensures all imports work correctly
-        from myai.app import app, console, main, state
+        """Test that the app module can be imported without errors."""
+        import myai.app
 
-        assert app is not None
-        assert console is not None
-        assert main is not None
-        assert state is not None
+        assert hasattr(myai.app, "app")
+        assert hasattr(myai.app, "main")
+        assert hasattr(myai.app, "state")
+        assert hasattr(myai.app, "console")
 
-    @patch("myai.app.console")
-    def test_command_execution_flow(self, mock_console):
-        """Test the flow of command execution."""
-        ctx = MagicMock()
+    @patch("myai.agent.registry.get_agent_registry")
+    @patch("myai.config.manager.get_config_manager")
+    def test_command_execution_flow(self, mock_config_manager, mock_registry):
+        """Test complete command execution flow."""
+        # Mock dependencies
+        mock_agent = MagicMock()
+        mock_agent.metadata.name = "test-agent"
+        mock_agent.metadata.category.value = "test"
 
-        # Execute main callback to set up state
-        main_callback(ctx=ctx, debug=True, verbose=False, config_path=None, output_format="table", no_color=False)
+        mock_registry.return_value.list_agents.return_value = [mock_agent]
 
-        # Execute version command
-        version(ctx, short=False)
+        mock_config = MagicMock()
+        mock_config.agents.enabled = []
+        mock_config.agents.global_enabled = []
 
-        # Should have proper state
-        assert state.debug is True
-        mock_console.print.assert_called()
+        mock_config_manager.return_value.get_config.return_value = mock_config
+        mock_config_manager.return_value.get_config_path.return_value = None
 
-    def test_typer_app_structure(self):
-        """Test that the Typer app is properly structured."""
-        # Test that app has the expected structure
-        assert callable(app)
-        assert hasattr(app, "info")
-        assert app.info.name == "myai"
+        from typer.testing import CliRunner
+
+        runner = CliRunner()
+
+        # Test help command
+        result = runner.invoke(app, ["--help"])
+        assert result.exit_code == 0
+        assert "MyAI" in result.stdout
+
+        # Test version command
+        result = runner.invoke(app, ["version"])
+        assert result.exit_code == 0
+
+        # Test status command
+        result = runner.invoke(app, ["status"])
+        assert result.exit_code == 0

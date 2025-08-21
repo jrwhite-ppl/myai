@@ -15,19 +15,14 @@ class TestAppState:
         state = AppState()
 
         assert state.debug is False
-        assert state.verbose is False
-        assert state.config_path is None
         assert state.output_format == "table"
         assert state.context == {}
 
     def test_state_with_values(self):
         """Test state initialization with custom values."""
-        config_path = Path("/test/config.json")
-        state = AppState(debug=True, verbose=True, config_path=config_path, output_format="json")
+        state = AppState(debug=True, output_format="json")
 
         assert state.debug is True
-        assert state.verbose is True
-        assert state.config_path == config_path
         assert state.output_format == "json"
 
     def test_is_debug(self):
@@ -39,21 +34,13 @@ class TestAppState:
         assert state.is_debug()
 
     def test_is_verbose(self):
-        """Test verbose mode checking."""
-        # Verbose false, debug false
-        state = AppState(debug=False, verbose=False)
+        """Test verbose mode checking (now same as debug)."""
+        # When debug is false, verbose is false
+        state = AppState(debug=False)
         assert not state.is_verbose()
 
-        # Verbose true, debug false
-        state = AppState(debug=False, verbose=True)
-        assert state.is_verbose()
-
-        # Verbose false, debug true (debug implies verbose)
-        state = AppState(debug=True, verbose=False)
-        assert state.is_verbose()
-
-        # Both true
-        state = AppState(debug=True, verbose=True)
+        # When debug is true, verbose is true
+        state = AppState(debug=True)
         assert state.is_verbose()
 
     def test_context_management(self):
@@ -113,18 +100,14 @@ class TestAppState:
 
         # Modify state attributes
         state.debug = True
-        state.verbose = True
-        state.config_path = Path("/new/path")
         state.output_format = "json"
 
         assert state.debug is True
-        assert state.verbose is True
-        assert state.config_path == Path("/new/path")
         assert state.output_format == "json"
 
         # Test that mode checking still works
         assert state.is_debug()
-        assert state.is_verbose()
+        assert state.is_verbose()  # verbose is same as debug now
 
     def test_context_with_various_types(self):
         """Test context with various data types."""
@@ -163,6 +146,5 @@ class TestAppState:
         # Original defaults should be preserved
         state3 = AppState()
         assert state3.debug is False
-        assert state3.verbose is False
         assert state3.output_format == "table"
         assert state3.context == {}

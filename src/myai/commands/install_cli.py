@@ -1,5 +1,5 @@
 """
-MyAI Setup CLI command interface.
+MyAI Installation CLI command interface.
 """
 
 import asyncio
@@ -225,8 +225,8 @@ def callback(ctx: typer.Context):
 
 
 # Subcommand docstrings are used for help messages
-@app.command()
-def all_setup():
+@app.command(name="all")
+def install_all():
     """
     Comprehensive setup of MyAI with all integrations.
 
@@ -247,10 +247,8 @@ def all_setup():
     - .cursor/rules/ (directory) and *.mdc files
 
     Examples:
-      myai setup all-setup
+      myai install all
     """
-    import json
-
     import myai
 
     console.print("🚀 Starting comprehensive MyAI setup...")
@@ -477,37 +475,38 @@ source: "~/.myai/agents"
     else:
         console.print(f"  ✅ Created {agent_count} agent wrappers in .claude/agents")
 
-    # Create project-level Claude settings
+    # Create or update project-level Claude settings
     project_claude_settings = project_claude_dir / "settings.local.json"
-    if not project_claude_settings.exists():
-        # Create a basic project configuration
-        claude_config = {
-            "projects": {
-                str(cwd): {
-                    "name": cwd.name,
-                    "description": f"MyAI-managed project: {cwd.name}",
-                    "tools": [
-                        "Task",
-                        "Bash",
-                        "Read",
-                        "Edit",
-                        "Write",
-                        "NotebookRead",
-                        "NotebookEdit",
-                        "WebFetch",
-                        "TodoWrite",
-                        "WebSearch",
-                    ],
-                    "agentsPath": str(project_claude_agents),
-                    "settings": {"model": "claude-3-sonnet-20241022", "temperature": 0.7},
-                }
+
+    # Always update the project configuration to keep it in sync
+    from myai.utils.json_content_manager import update_claude_settings
+
+    claude_project_config = {
+        "projects": {
+            str(cwd): {
+                "name": cwd.name,
+                "description": f"MyAI-managed project: {cwd.name}",
+                "tools": [
+                    "Task",
+                    "Bash",
+                    "Read",
+                    "Edit",
+                    "Write",
+                    "NotebookRead",
+                    "NotebookEdit",
+                    "WebFetch",
+                    "TodoWrite",
+                    "WebSearch",
+                ],
+                "agentsPath": str(project_claude_agents),
+                "settings": {"model": "claude-3-sonnet-20241022", "temperature": 0.7},
             }
         }
+    }
 
-        with open(project_claude_settings, "w", encoding="utf-8") as f:
-            json.dump(claude_config, f, indent=2)
-
-        console.print("✅ Created project .claude configuration")
+    # Update settings preserving any user customizations
+    update_claude_settings(project_claude_settings, claude_project_config)
+    console.print("✅ Created/updated project .claude configuration")
 
     # Create project .cursor directory with rules subdirectory
     project_cursor_dir = cwd / ".cursor"
@@ -551,6 +550,24 @@ alwaysApply: false
 
     console.print(f"✅ Created {mdc_count} Cursor rules in .cursor/rules/")
 
+    # Step 7: Create AGENTS.md file at project root
+    console.print("\n[bold]Step 7: Setting up AGENTS.md integration[/bold]")
+
+    from myai.agents_md import AgentsMdManager
+
+    agents_md_manager = AgentsMdManager(cwd)
+    root_agents_md = cwd / "AGENTS.md"
+
+    if root_agents_md.exists():
+        console.print("  [yellow]AGENTS.md already exists, preserving existing file[/yellow]")
+    else:
+        try:
+            # Create root AGENTS.md with enabled agents
+            agents_md_manager.create(root_agents_md, template="root", force=False)
+            console.print("✅ Created root AGENTS.md with MyAI agent references")
+        except Exception as e:
+            console.print(f"  [yellow]Warning: Could not create AGENTS.md: {e}[/yellow]")
+
     # Final summary
     console.print("\n[bold green]✨ MyAI setup complete![/bold green]")
     console.print("\n[bold]What was set up:[/bold]")
@@ -561,6 +578,7 @@ alwaysApply: false
     console.print("  • Claude integration in ~/.claude")
     console.print("  • Project-level .claude/agents directory")
     console.print("  • Project-level .cursor/rules directory with .mdc files")
+    console.print("  • AGENTS.md file with project guidelines")
     console.print("\n[bold]You can now:[/bold]")
     console.print("  • Use 'myai agent list' to see available agents")
     console.print("  • Use 'myai agent enable <name>' to enable agents (files created automatically)")
@@ -568,26 +586,114 @@ alwaysApply: false
     console.print("  • Access agents in Cursor as project rules")
 
 
-@app.command()
-def global_setup():
+@app.command(name="global")
+def install_global():
     """
     Setup global MyAI configuration.
 
     Examples:
-      myai setup global-setup
+      myai install global
     """
     pass
 
 
 @app.command()
-def project():
+def project(
+    with_agents_md: bool = typer.Option(  # noqa: FBT001
+        True, "--with-agents-md/--no-agents-md", help="Include AGENTS.md setup"
+    ),
+    force: bool = typer.Option(False, "--force", help="Overwrite existing files"),  # noqa: FBT001
+):
     """
     Setup project MyAI configuration.
 
+    This command creates:
+    - .myai directory for project configuration
+    - .claude directory with settings
+    - .cursor directory with rules
+    - AGENTS.md file with project guidelines (optional)
+
     Examples:
-      myai setup project
+      myai install project
+      myai install project --no-agents-md
+      myai install project --force
     """
-    pass
+    console.print("🚀 Setting up project configuration...")
+
+    cwd = Path.cwd()
+
+    # Create .myai directory
+    myai_dir = cwd / ".myai"
+    myai_dir.mkdir(exist_ok=True)
+    console.print("✅ Created .myai directory")
+
+    # Create .claude directory
+    claude_dir = cwd / ".claude"
+    claude_dir.mkdir(exist_ok=True)
+    claude_agents_dir = claude_dir / "agents"
+    claude_agents_dir.mkdir(exist_ok=True)
+    console.print("✅ Created .claude directory structure")
+
+    # Create or update Claude settings preserving user customizations
+    claude_settings = claude_dir / "settings.local.json"
+
+    from myai.utils.json_content_manager import update_claude_settings
+
+    claude_project_config = {
+        "projects": {
+            str(cwd): {
+                "name": cwd.name,
+                "description": f"MyAI-managed project: {cwd.name}",
+                "tools": [
+                    "Task",
+                    "Bash",
+                    "Read",
+                    "Edit",
+                    "Write",
+                    "NotebookRead",
+                    "NotebookEdit",
+                    "WebFetch",
+                    "TodoWrite",
+                    "WebSearch",
+                ],
+                "agentsPath": str(claude_agents_dir),
+                "settings": {"model": "claude-3-sonnet-20241022", "temperature": 0.7},
+            }
+        }
+    }
+
+    # Update settings preserving any user customizations
+    update_claude_settings(claude_settings, claude_project_config)
+    console.print("✅ Created/updated Claude settings")
+
+    # Create .cursor directory
+    cursor_dir = cwd / ".cursor"
+    cursor_dir.mkdir(exist_ok=True)
+    cursor_rules_dir = cursor_dir / "rules"
+    cursor_rules_dir.mkdir(exist_ok=True)
+    console.print("✅ Created .cursor directory structure")
+
+    # Setup AGENTS.md if requested
+    if with_agents_md:
+        from myai.agents_md import AgentsMdManager
+
+        agents_md_manager = AgentsMdManager(cwd)
+        root_agents_md = cwd / "AGENTS.md"
+
+        if root_agents_md.exists() and not force:
+            console.print("[yellow]AGENTS.md already exists, preserving existing file[/yellow]")
+        else:
+            try:
+                agents_md_manager.create(root_agents_md, template="root", force=force)
+                console.print("✅ Created root AGENTS.md with MyAI agent references")
+            except Exception as e:
+                console.print(f"[yellow]Warning: Could not create AGENTS.md: {e}[/yellow]")
+
+    console.print("\n[green]✨ Project setup complete![/green]")
+    console.print("\nNext steps:")
+    console.print("  • Run 'myai agent list' to see available agents")
+    console.print("  • Run 'myai agent enable <name>' to enable agents")
+    console.print("  • Run 'myai status' to check configuration")
 
 
 @app.command()
@@ -599,259 +705,8 @@ def client(client_name: str):
         client_name: The client name (e.g., claude, cursor)
 
     Examples:
-      myai setup client claude
+      myai install client claude
     """
     # TODO: Implement client-specific setup logic in Phase 5
     _ = client_name  # Acknowledge parameter usage
     pass
-
-
-@app.command()
-def uninstall(
-    global_agents: bool = typer.Option(False, "--global-agents", help="Remove global MyAI agents"),  # noqa: FBT001
-    global_config: bool = typer.Option(False, "--global-config", help="Remove global MyAI config"),  # noqa: FBT001
-    claude: bool = typer.Option(False, "--claude", help="Remove Claude integration"),  # noqa: FBT001
-    project: bool = typer.Option(False, "--project", help="Remove project-level files"),  # noqa: FBT001
-    remove_all: bool = typer.Option(False, "--all", help="Remove all MyAI files"),  # noqa: FBT001
-    force: bool = typer.Option(False, "--force", help="Skip confirmation prompts"),  # noqa: FBT001
-):
-    """
-    Uninstall MyAI components.
-
-    This command removes only the files that MyAI added. User-created agents
-    and configurations are preserved unless --force is used.
-
-    Examples:
-      myai setup uninstall --project        # Remove project files only
-      myai setup uninstall --global-agents  # Remove global agents only
-      myai setup uninstall --all            # Remove everything
-      myai setup uninstall --all --force    # Remove everything without prompts
-    """
-    if not any([global_agents, global_config, claude, project, remove_all]):
-        console.print("[yellow]No components selected for removal. Use --help for options.[/yellow]")
-        raise typer.Exit(0)
-
-    # If --all is specified, enable all options
-    if remove_all:
-        global_agents = global_config = claude = project = True
-
-    console.print("🔍 Analyzing MyAI installation...")
-
-    # Track what will be removed
-    # Each item is: (name, path_or_paths, description)
-    # where path_or_paths can be a Path or List[Path]
-    to_remove: list[tuple[str, Path | list[Path], str]] = []
-
-    # Check global MyAI directory
-    myai_dir = Path.home() / ".myai"
-    if myai_dir.exists() and (global_agents or global_config):
-        # When removing global components, remove entire ~/.myai directory
-        file_count = sum(1 for _ in myai_dir.rglob("*") if _.is_file())
-        dir_count = sum(1 for _ in myai_dir.rglob("*") if _.is_dir())
-        to_remove.append(("Global MyAI directory", myai_dir, f"{file_count} files in {dir_count} directories"))
-
-    # Check Claude directory
-    if claude:
-        claude_dir = Path.home() / ".claude"
-        claude_agents_dir = claude_dir / "agents"
-        if claude_agents_dir.exists():
-            # Get list of our agent names to identify which .md files we created
-            from myai.agent.registry import get_agent_registry
-
-            registry = get_agent_registry()
-            agents = registry.list_agents()
-
-            # Build list of our .md files to remove
-            our_agent_files = []
-            for agent in agents:
-                if hasattr(agent, "metadata") and hasattr(agent.metadata, "name"):
-                    agent_name = agent.metadata.name
-                elif hasattr(agent, "name"):
-                    agent_name = agent.name
-                else:
-                    continue
-
-                agent_file = claude_agents_dir / f"{agent_name}.md"
-                if agent_file.exists():
-                    our_agent_files.append(agent_file)
-
-            if our_agent_files:
-                to_remove.append(
-                    ("Claude agents (MyAI agent files only)", our_agent_files, f"{len(our_agent_files)} .md files")
-                )
-
-    # Check project-level files
-    if project:
-        cwd = Path.cwd()
-
-        # Project Claude directory - we create:
-        # 1. .claude/agents/*.md files (specific agent files only)
-        # 2. .claude/settings.local.json (only if it didn't exist during setup)
-        project_claude = cwd / ".claude"
-        if project_claude.exists():
-            project_agents = project_claude / "agents"
-            if project_agents.exists():
-                # Get list of our agent names to identify which .md files we created
-                from myai.agent.registry import get_agent_registry
-
-                registry = get_agent_registry()
-                agents = registry.list_agents()
-
-                # Build list of our .md files to remove
-                our_agent_files = []
-                for agent in agents:
-                    if hasattr(agent, "metadata") and hasattr(agent.metadata, "name"):
-                        agent_name = agent.metadata.name
-                    elif hasattr(agent, "name"):
-                        agent_name = agent.name
-                    else:
-                        continue
-
-                    agent_file = project_agents / f"{agent_name}.md"
-                    if agent_file.exists():
-                        our_agent_files.append(agent_file)
-
-                if our_agent_files:
-                    to_remove.append(
-                        (
-                            "Project Claude agents (MyAI agent files only)",
-                            our_agent_files,
-                            f"{len(our_agent_files)} .md files",
-                        )
-                    )
-
-        # Project Cursor directory - we create:
-        # 1. .cursor/rules/*.mdc files (specific agent files only)
-        project_cursor_rules = cwd / ".cursor" / "rules"
-        if project_cursor_rules.exists():
-            # Get list of our agent names to identify which .mdc files we created
-            from myai.agent.registry import get_agent_registry
-
-            registry = get_agent_registry()
-            agents = registry.list_agents()
-
-            # Build list of our .mdc files to remove
-            our_mdc_files = []
-            for agent in agents:
-                if hasattr(agent, "metadata") and hasattr(agent.metadata, "name"):
-                    agent_name = agent.metadata.name
-                elif hasattr(agent, "name"):
-                    agent_name = agent.name
-                else:
-                    continue
-
-                mdc_file = project_cursor_rules / f"{agent_name}.mdc"
-                if mdc_file.exists():
-                    our_mdc_files.append(mdc_file)
-
-            if our_mdc_files:
-                to_remove.append(
-                    ("Project Cursor rules (MyAI agent files only)", our_mdc_files, f"{len(our_mdc_files)} .mdc files")
-                )
-
-    if not to_remove:
-        console.print("[green]✅ No MyAI files found to remove.[/green]")
-        raise typer.Exit(0)
-
-    # Display what will be removed
-    console.print("\n[bold]The following will be removed:[/bold]")
-    for name, path_or_paths, details in to_remove:
-        if isinstance(path_or_paths, list):
-            # For lists of files, show summary instead of full list
-            console.print(f"  • {name}: {details}")
-        else:
-            console.print(f"  • {name}: {path_or_paths}")
-    console.print(f"\n[yellow]Total: {len(to_remove)} locations[/yellow]")
-
-    # Confirm unless --force
-    if not force:
-        confirm = typer.confirm("\nDo you want to proceed with removal?", default=False)
-        if not confirm:
-            console.print("[yellow]Uninstall cancelled.[/yellow]")
-            raise typer.Exit(0)
-
-    # Perform removal
-    console.print("\n🗑️  Removing MyAI components...")
-    removed_count = 0
-
-    for name, path_or_paths, _ in to_remove:
-        try:
-            # Handle both single path and list of paths
-            if isinstance(path_or_paths, list):
-                # Remove individual files (for Cursor rules)
-                for file_path in path_or_paths:
-                    file_path.unlink()
-                console.print(f"  ✅ Removed {name}")
-            elif path_or_paths.is_file():
-                path_or_paths.unlink()
-                console.print(f"  ✅ Removed {name}")
-            else:
-                shutil.rmtree(path_or_paths)
-                console.print(f"  ✅ Removed {name}")
-            removed_count += 1
-        except Exception as e:
-            console.print(f"  [red]❌ Failed to remove {name}: {e}[/red]")
-
-    # Cleanup empty directories after file removal
-
-    if claude:
-        # Check if agents directory is empty after removing our files
-        claude_agents_dir = Path.home() / ".claude" / "agents"
-        if claude_agents_dir.exists() and not any(claude_agents_dir.iterdir()):
-            try:
-                claude_agents_dir.rmdir()
-                console.print("  ✅ Removed empty ~/.claude/agents directory")
-            except Exception:  # noqa: S110
-                pass
-
-        # Check if ~/.claude itself is empty
-        claude_dir = Path.home() / ".claude"
-        if claude_dir.exists() and not any(claude_dir.iterdir()):
-            try:
-                claude_dir.rmdir()
-                console.print("  ✅ Removed empty ~/.claude directory")
-            except Exception:  # noqa: S110
-                pass
-
-    if project:
-        # Check if project .claude/agents is empty after removing our files
-        project_agents = Path.cwd() / ".claude" / "agents"
-        if project_agents.exists() and not any(project_agents.iterdir()):
-            try:
-                project_agents.rmdir()
-                console.print("  ✅ Removed empty .claude/agents directory")
-            except Exception:  # noqa: S110
-                pass
-
-        # Check if project .claude is empty
-        project_claude = Path.cwd() / ".claude"
-        if project_claude.exists() and not any(project_claude.iterdir()):
-            try:
-                project_claude.rmdir()
-                console.print("  ✅ Removed empty .claude directory")
-            except Exception:  # noqa: S110
-                pass
-
-        # Check if .cursor/rules is empty after removing our files
-        project_cursor_rules = Path.cwd() / ".cursor" / "rules"
-        if project_cursor_rules.exists() and not any(project_cursor_rules.iterdir()):
-            try:
-                project_cursor_rules.rmdir()
-                console.print("  ✅ Removed empty .cursor/rules directory")
-            except Exception:  # noqa: S110
-                pass
-
-        # For .cursor itself, we only remove if completely empty
-        # Users might have other Cursor-related files
-        project_cursor = Path.cwd() / ".cursor"
-        if project_cursor.exists() and not any(project_cursor.iterdir()):
-            try:
-                project_cursor.rmdir()
-                console.print("  ✅ Removed empty .cursor directory")
-            except Exception:  # noqa: S110
-                pass
-
-    console.print(f"\n[green]✨ Uninstall complete! Removed {removed_count} components.[/green]")
-
-    if removed_count < len(to_remove):
-        console.print("[yellow]Some components could not be removed. Check permissions.[/yellow]")
