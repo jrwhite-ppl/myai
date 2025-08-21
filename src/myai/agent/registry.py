@@ -74,6 +74,8 @@ class AgentRegistry:
         self._agents_by_tool: Dict[str, Set[str]] = {}
         self._agents_by_tag: Dict[str, Set[str]] = {}
         self._enabled_agents: Set[str] = set()
+        self._custom_agents: Set[str] = set()  # Track custom/imported agents
+        self._agents_by_source: Dict[str, Set[str]] = {}  # Track agents by source
         self._index_lock = threading.Lock()
 
         # Discovery settings
@@ -100,6 +102,9 @@ class AgentRegistry:
         # Initial discovery
         if self._auto_discover:
             self.discover_agents()
+
+            # Load custom agents from tracker
+            self._load_custom_agents()
 
     def register_agent(
         self,
@@ -150,6 +155,16 @@ class AgentRegistry:
                     self._agents_by_tag[tag] = set()
                 self._agents_by_tag[tag].add(agent.metadata.name)
 
+            # Track custom agents
+            if agent.is_custom:
+                self._custom_agents.add(agent.metadata.name)
+
+            # Track by source
+            if agent.source:
+                if agent.source not in self._agents_by_source:
+                    self._agents_by_source[agent.source] = set()
+                self._agents_by_source[agent.source].add(agent.metadata.name)
+
             # Add to enabled set if not explicitly disabled
             if not hasattr(agent.metadata, "enabled") or agent.metadata.enabled:
                 self._enabled_agents.add(agent.metadata.name)
@@ -159,8 +174,8 @@ class AgentRegistry:
                 with self._cache_lock:
                     self._cache[agent.metadata.name] = (agent, datetime.now(timezone.utc))
 
-            # Persist if requested
-            if persist:
+            # Persist if requested (but not for custom agents with external paths)
+            if persist and not (agent.is_custom and agent.external_path):
                 self._agent_storage.save_agent(agent)
 
     def get_agent(self, name: str) -> Optional[AgentSpecification]:
@@ -341,6 +356,25 @@ class AgentRegistry:
         with self._index_lock:
             return name in self._enabled_agents
 
+    def is_custom(self, name: str) -> bool:
+        """Check if an agent is custom/imported."""
+        with self._index_lock:
+            return name in self._custom_agents
+
+    def get_custom_agents(self) -> List[AgentSpecification]:
+        """Get all custom/imported agents."""
+        with self._index_lock:
+            return [self._agents_by_name[name] for name in self._custom_agents if name in self._agents_by_name]
+
+    def get_agents_by_source(self, source: str) -> List[AgentSpecification]:
+        """Get all agents from a specific source."""
+        with self._index_lock:
+            if source not in self._agents_by_source:
+                return []
+            return [
+                self._agents_by_name[name] for name in self._agents_by_source[source] if name in self._agents_by_name
+            ]
+
     def discover_agents(
         self,
         paths: Optional[List[Path]] = None,
@@ -409,13 +443,20 @@ class AgentRegistry:
 
     def refresh(self) -> None:
         """Refresh registry by re-discovering agents."""
-        # Clear indexes
+        # Store custom agents before clearing
         with self._index_lock:
+            custom_agents_backup = {
+                name: self._agents_by_name[name] for name in self._custom_agents if name in self._agents_by_name
+            }
+
+            # Clear indexes
             self._agents_by_name.clear()
             self._agents_by_category.clear()
             self._agents_by_tool.clear()
             self._agents_by_tag.clear()
             self._enabled_agents.clear()
+            self._custom_agents.clear()
+            self._agents_by_source.clear()
 
         # Clear cache
         self.clear_cache()
@@ -423,6 +464,13 @@ class AgentRegistry:
         # Re-discover agents
         if self._auto_discover:
             self.discover_agents()
+
+            # Reload custom agents from tracker
+            self._load_custom_agents()
+
+        # Restore custom agents (in case they weren't in tracker yet)
+        for agent in custom_agents_backup.values():
+            self.register_agent(agent, persist=False, overwrite=True)
 
     def get_statistics(self) -> Dict[str, Any]:
         """
@@ -435,6 +483,8 @@ class AgentRegistry:
             return {
                 "total_agents": len(self._agents_by_name),
                 "enabled_agents": len(self._enabled_agents),
+                "custom_agents": len(self._custom_agents),
+                "sources": list(self._agents_by_source.keys()),
                 "categories": list(self._agents_by_category.keys()),
                 "tools": list(self._agents_by_tool.keys()),
                 "tags": list(self._agents_by_tag.keys()),
@@ -473,8 +523,68 @@ class AgentRegistry:
         # Remove from enabled set
         self._enabled_agents.discard(name)
 
+        # Remove from custom agents
+        self._custom_agents.discard(name)
+
+        # Remove from source index
+        for source, agents in list(self._agents_by_source.items()):
+            if name in agents:
+                agents.discard(name)
+                if not agents:
+                    del self._agents_by_source[source]
+
         # Remove from main index
         del self._agents_by_name[name]
+
+    def _load_custom_agents(self) -> None:
+        """Load custom agents from the tracker."""
+        try:
+            from myai.integrations.custom_agents import get_custom_agent_tracker
+            from myai.models.agent import AgentCategory, AgentMetadata
+
+            tracker = get_custom_agent_tracker()
+            custom_agents = tracker.get_custom_agents()
+
+            for agent_data in custom_agents:
+                try:
+                    # Re-create the agent specification
+                    metadata = AgentMetadata(
+                        name=agent_data["name"],
+                        display_name=agent_data["display_name"],
+                        description=agent_data["description"],
+                        category=AgentCategory(agent_data["category"]),
+                        temperature=None,
+                        max_tokens=None,
+                    )
+
+                    # Read content from external file if available
+                    content = ""
+                    file_path = None
+                    if agent_data.get("external_path"):
+                        file_path = Path(agent_data["external_path"])
+                        if file_path.exists():
+                            content = file_path.read_text(encoding="utf-8")
+
+                    # Create agent specification
+                    agent_spec = AgentSpecification(
+                        metadata=metadata,
+                        content=content,
+                        is_custom=True,
+                        source=agent_data.get("source"),
+                        external_path=file_path,
+                        file_path=file_path,
+                    )
+
+                    # Register without persisting
+                    self.register_agent(agent_spec, persist=False, overwrite=True)
+
+                except Exception:  # noqa: S112
+                    # Skip agents that fail to load
+                    continue
+
+        except Exception:  # noqa: S110
+            # If tracker fails, continue without custom agents
+            pass
 
     def _add_to_index(self, agent: AgentSpecification) -> None:
         """Add agent to all indexes without locking."""

@@ -14,6 +14,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from typer.testing import CliRunner
 
 from myai.app import create_app
@@ -67,6 +68,12 @@ class TestFullSetupIntegration(unittest.TestCase):
         if self.test_dir.exists():
             shutil.rmtree(self.test_dir)
 
+        # Clear any singleton instances that might have been created
+        from myai.agent.registry import AgentRegistry
+
+        AgentRegistry._instance = None
+
+    @pytest.mark.xdist_group("serial")  # Run this test serially to avoid parallel execution issues
     @patch("myai.commands.install_cli.Path.home")
     @patch("myai.commands.install_cli.Path.cwd")
     @patch("myai.commands.install_cli.get_config_manager")

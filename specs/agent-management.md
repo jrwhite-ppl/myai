@@ -245,16 +245,19 @@ myai agent history <name>
    - Package default agents (`src/myai/data/agents/default/`)
    - User copied agents (`~/.myai/agents/`)
    - Community agents (`~/.myai/agents/community/`)
+   - **Imported custom agents** (tracked via metadata, original files preserved)
 
 2. **Parse Specifications**
    - Extract metadata from frontmatter (if present)
    - Extract metadata from content structure (if no frontmatter)
    - Validate agent structure
    - Compute checksums
+   - **Load custom agent metadata** from `~/.myai/config/custom_agents.json`
 
 3. **Build Registry**
    - Merge discovered agents
    - Resolve conflicts (project > custom > package default)
+   - **Track custom/imported agents** with source attribution
    - Cache results
 
 4. **Apply Filters**
@@ -262,6 +265,7 @@ myai agent history <name>
    - Category filters
    - Tag matching
    - Tool requirements
+   - **Custom agent source** (e.g., `claude`, `cursor`, `user`)
 
 ### Default Agent Loading
 - Default agents are bundled with the package in `src/myai/data/agents/default/`
@@ -296,6 +300,56 @@ def transform_agent_to_cursor_rules(agent: Agent) -> str:
     # For project-level integration, just return the agent content
     # No metadata or frontmatter needed
     return agent.content
+```
+
+## Custom Agent Management
+
+### Importing External Agents
+```bash
+# Import custom agents from integrations
+myai system integration-import -i claude
+
+# Import from multiple sources
+myai system integration-import -i claude -i cursor
+```
+
+### Custom Agent Tracking
+- **Metadata Storage**: `~/.myai/config/custom_agents.json`
+- **Original Files**: Preserved in their original locations
+- **Visual Indicators**: Custom agents show with source `(claude)` or `(cursor)`
+- **Uninstall Protection**: Custom agents are NOT removed during MyAI uninstall
+
+### Custom Agent Metadata Format
+```json
+{
+  "my-code-reviewer": {
+    "name": "my-code-reviewer",
+    "display_name": "My Code Reviewer",
+    "description": "Custom code review assistant",
+    "category": "custom",
+    "source": "claude",
+    "external_path": "/Users/john/.claude/agents/my-code-reviewer.md",
+    "file_path": "/Users/john/.claude/agents/my-code-reviewer.md"
+  }
+}
+```
+
+### Managing Custom Agents
+```bash
+# List all agents (including custom)
+myai agent list
+
+# Show custom agent details
+myai agent show my-code-reviewer
+
+# Enable/disable custom agents
+myai agent enable my-code-reviewer
+myai agent disable my-code-reviewer
+
+# Custom agents cannot be:
+# - Edited through MyAI (use original tool)
+# - Deleted through MyAI (remove from original location)
+# - Exported (they remain in original location)
 ```
 
 ## Agent Templates

@@ -120,6 +120,8 @@ class TestFileSystemStorage:
 
     def test_list_backups(self, storage):
         """Test listing backups for a key."""
+        import time
+
         storage.write("test", {"data": "1"})
 
         # No backups initially
@@ -127,6 +129,7 @@ class TestFileSystemStorage:
 
         # Create backups
         backup1 = storage.backup("test")
+        time.sleep(0.001)  # Small delay to ensure different timestamps
         storage.write("test", {"data": "2"})
         backup2 = storage.backup("test")
 

@@ -280,6 +280,7 @@ class TestInstallIntegration(unittest.TestCase):
                 agent = MagicMock()
                 agent.metadata.name = name
                 agent.name = name
+                agent.is_custom = False  # Explicitly mark as not custom
                 test_agents.append(agent)
             registry.list_agents.return_value = test_agents
             mock_registry.return_value = registry
@@ -340,6 +341,7 @@ class TestInstallIntegration(unittest.TestCase):
             agent = MagicMock()
             agent.metadata.name = "lead-developer"
             agent.name = "lead-developer"
+            agent.is_custom = False  # Explicitly mark as not custom
             registry.list_agents.return_value = [agent]
             mock_registry.return_value = registry
 

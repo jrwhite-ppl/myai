@@ -657,6 +657,10 @@ def list_integrations(
             console.print(table)
 
         if status:
+            # Initialize the manager first
+            console.print("[dim]Initializing integrations...[/dim]")
+            run_async(manager.initialize())
+
             # Show active integration status
             active_adapters = manager.list_adapters()
 
@@ -719,8 +723,7 @@ def integration_health(
         manager = IntegrationManager()
 
         # Initialize integrations first
-        if state.is_debug():
-            console.print("[dim]Initializing integrations...[/dim]")
+        console.print("[dim]Initializing integrations...[/dim]")
         run_async(manager.initialize())
 
         if integration:
@@ -826,6 +829,10 @@ def import_agents(
     try:
         manager = IntegrationManager()
 
+        # Initialize integrations first
+        console.print("[dim]Initializing integrations...[/dim]")
+        run_async(manager.initialize())
+
         if integration:
             # Validate specified integrations
             active_adapters = manager.list_adapters()
@@ -889,6 +896,10 @@ def validate_integrations(
     try:
         manager = IntegrationManager()
 
+        # Initialize integrations first
+        console.print("[dim]Initializing integrations...[/dim]")
+        run_async(manager.initialize())
+
         if integration:
             integrations_to_validate = [integration]
         else:
@@ -939,6 +950,10 @@ def backup_integrations(
 
     try:
         manager = IntegrationManager()
+
+        # Initialize integrations first
+        console.print("[dim]Initializing integrations...[/dim]")
+        run_async(manager.initialize())
 
         if integration:
             # Validate specified integrations

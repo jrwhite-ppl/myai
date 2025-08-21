@@ -96,6 +96,10 @@ class AgentSpecification(BaseModel):
     is_template: bool = False
     template_variables: Dict[str, Any] = Field(default_factory=dict)
     dependencies: List[str] = Field(default_factory=list)
+    # Custom agent tracking
+    is_custom: bool = False
+    source: Optional[str] = None  # 'claude', 'cursor', 'user', etc.
+    external_path: Optional[Path] = None  # Original path for imported agents
 
     model_config = ConfigDict(arbitrary_types_allowed=True, validate_assignment=True)
 
@@ -122,7 +126,7 @@ class AgentSpecification(BaseModel):
 
     def get_frontmatter(self) -> Dict[str, Any]:
         """Extract frontmatter as dictionary."""
-        return {
+        frontmatter = {
             "name": self.metadata.name,
             "display_name": self.metadata.display_name,
             "description": self.metadata.description,
@@ -138,6 +142,16 @@ class AgentSpecification(BaseModel):
             "created": self.metadata.created.isoformat(),
             "modified": self.metadata.modified.isoformat(),
         }
+
+        # Add custom agent fields if present
+        if self.is_custom:
+            frontmatter["is_custom"] = True
+        if self.source:
+            frontmatter["source"] = self.source
+        if self.external_path:
+            frontmatter["external_path"] = str(self.external_path)
+
+        return frontmatter
 
     def to_markdown(self) -> str:
         """Convert agent specification to markdown format."""
@@ -265,4 +279,7 @@ class AgentSpecification(BaseModel):
             is_template=frontmatter_dict.get("is_template", False),
             template_variables=frontmatter_dict.get("template_variables", {}),
             dependencies=frontmatter_dict.get("dependencies", []),
+            is_custom=frontmatter_dict.get("is_custom", False),
+            source=frontmatter_dict.get("source"),
+            external_path=Path(frontmatter_dict["external_path"]) if frontmatter_dict.get("external_path") else None,
         )

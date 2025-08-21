@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from myai.integrations.base import AbstractAdapter, AdapterStatus
+from myai.integrations.custom_agents import get_custom_agent_tracker
 from myai.integrations.factory import get_adapter_factory
 
 
@@ -180,7 +181,7 @@ class IntegrationManager:
 
     async def import_agents(self, adapter_names: Optional[List[str]] = None) -> Dict[str, List[Any]]:
         """
-        Import agents from specified adapters.
+        Import agents from specified adapters and register them in the agent registry.
 
         Args:
             adapter_names: Specific adapters to import from, or None for all.
@@ -188,6 +189,10 @@ class IntegrationManager:
         Returns:
             Dictionary mapping adapter names to imported agents.
         """
+        from myai.agent.registry import get_agent_registry
+        from myai.models.agent import AgentCategory, AgentMetadata, AgentSpecification
+
+        registry = get_agent_registry()
         results = {}
 
         adapters_to_import = adapter_names or list(self._adapters.keys())
@@ -195,9 +200,77 @@ class IntegrationManager:
         for name in adapters_to_import:
             if name in self._adapters:
                 adapter = self._adapters[name]
+                imported_agents = []
                 try:
-                    agents = await adapter.import_agents()
-                    results[name] = agents
+                    raw_agents = await adapter.import_agents()
+
+                    for raw_agent in raw_agents:
+                        try:
+                            # Convert raw agent data to proper AgentSpecification
+                            # Extract basic info
+                            agent_name = raw_agent.get("name", "unnamed")
+                            content = raw_agent.get("content", "")
+                            source = raw_agent.get("source", name)
+                            file_path = raw_agent.get("file_path")
+
+                            # Check if this agent already exists in MyAI (not custom)
+                            existing_agent = registry.get_agent(agent_name)
+                            if existing_agent and not existing_agent.is_custom:
+                                # Skip MyAI agents - we don't want to re-import them
+                                continue
+
+                            # Try to parse as markdown first to extract metadata
+                            try:
+                                temp_spec = AgentSpecification.from_markdown(
+                                    content, file_path=Path(file_path) if file_path else None
+                                )
+                                # Use parsed metadata as base
+                                metadata_dict = {
+                                    "name": temp_spec.metadata.name,
+                                    "display_name": temp_spec.metadata.display_name,
+                                    "description": temp_spec.metadata.description,
+                                    "category": temp_spec.metadata.category,
+                                    "version": temp_spec.metadata.version,
+                                    "tags": temp_spec.metadata.tags,
+                                    "tools": temp_spec.metadata.tools,
+                                }
+                                agent_content = temp_spec.content
+                            except Exception:
+                                # Fallback: create minimal metadata
+                                metadata_dict = {
+                                    "name": agent_name,
+                                    "display_name": agent_name.replace("-", " ").title(),
+                                    "description": f"Imported from {source}",
+                                    "category": AgentCategory.CUSTOM,
+                                }
+                                agent_content = content
+
+                            # Create metadata
+                            metadata = AgentMetadata(**metadata_dict)
+
+                            # Create agent specification with custom/import tracking
+                            agent_spec = AgentSpecification(
+                                metadata=metadata,
+                                content=agent_content,
+                                is_custom=True,
+                                source=source,
+                                external_path=Path(file_path) if file_path else None,
+                                file_path=Path(file_path) if file_path else None,
+                            )
+
+                            # Register in the agent registry (without persisting to avoid overwriting external file)
+                            registry.register_agent(agent_spec, persist=False, overwrite=True)
+
+                            # Save to custom agent tracker for persistence
+                            tracker = get_custom_agent_tracker()
+                            tracker.add_custom_agent(agent_spec)
+
+                            imported_agents.append(raw_agent)
+
+                        except Exception as e:
+                            print(f"Failed to register imported agent {raw_agent.get('name', 'unknown')}: {e}")
+
+                    results[name] = imported_agents
                 except Exception as e:
                     results[name] = []
                     # Log error

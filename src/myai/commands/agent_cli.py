@@ -200,6 +200,8 @@ def list_agents(
                     "tools": agent.metadata.tools,
                     "tags": agent.metadata.tags,
                     "version": agent.metadata.version,
+                    "is_custom": getattr(agent, "is_custom", False),
+                    "source": getattr(agent, "source", None),
                 }
                 for agent in agents
             ]
@@ -239,8 +241,16 @@ def list_agents(
                 else:
                     status = "[dim]Default[/dim]"
 
+                # Add custom indicator
+                name_display = agent.metadata.name
+                if hasattr(agent, "is_custom") and agent.is_custom:
+                    source_tag = getattr(agent, "source", "custom")
+                    # Only show source if it's a string (not a mock object)
+                    if isinstance(source_tag, str):
+                        name_display = f"{agent.metadata.name} [magenta]({source_tag})[/magenta]"
+
                 table.add_row(
-                    agent.metadata.name,
+                    name_display,
                     agent.metadata.display_name,
                     agent.metadata.category.value,
                     ", ".join(agent.metadata.tools[:3]),  # Show first 3 tools
@@ -297,6 +307,16 @@ def show(
             metadata_text.append(f"{', '.join(metadata.tools)}\n")
             metadata_text.append("Tags: ", style="bold")
             metadata_text.append(f"{', '.join(metadata.tags)}")
+
+            # Add custom agent information
+            if hasattr(agent, "is_custom") and agent.is_custom:
+                metadata_text.append("\n\n[magenta]Custom Agent Information:[/magenta]\n")
+                metadata_text.append("Source: ", style="bold")
+                source = getattr(agent, "source", "unknown")
+                metadata_text.append(f"{source}\n")
+                if hasattr(agent, "external_path") and agent.external_path:
+                    metadata_text.append("External Path: ", style="bold")
+                    metadata_text.append(f"{agent.external_path}")
 
             panel = Panel(
                 metadata_text,

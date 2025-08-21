@@ -133,7 +133,32 @@ class ClaudeAdapter(ToolAdapter):
 
 ### Claude-Specific Features
 
-#### 1. MCP Server Management
+#### 1. Custom Agent Import
+```bash
+# Import custom agents from Claude
+myai system integration-import -i claude
+
+# This will:
+# - Scan ~/.claude/agents/ for .md files
+# - Skip MyAI-created agents (avoid duplicates)
+# - Import custom agents while preserving original files
+# - Mark imported agents as custom with source tracking
+# - Save metadata to ~/.myai/config/custom_agents.json
+
+# Example output:
+📥 Importing agents from integrations...
+✅ Imported 1 agents successfully
+Use 'myai agent list' to see imported agents
+```
+
+**Important Notes:**
+- Custom agents are preserved during MyAI uninstall
+- Original files remain in ~/.claude/agents/ (not moved)
+- Custom agents show with source indicator: `my-code-reviewer (claude)`
+- Fully manageable through MyAI (enable/disable/show)
+- Metadata persists across CLI sessions
+
+#### 2. MCP Server Management
 ```bash
 # List MCP servers
 myai claude mcp list

@@ -1,5 +1,8 @@
 # MyAI Integration Status - UPDATED
 
+## Important: Python Command Execution
+**ALWAYS use `uv run` for Python commands** - e.g., `uv run python -m myai ...`
+
 ## Comprehensive Install Command
 **New**: `myai install all` now provides complete setup:
 1. Sets up global `~/.myai` directory with all default agents
@@ -22,10 +25,22 @@
 - Each project maintains its own agent rules
 - Run from within project directory
 
+## Custom Agent Import
+**New**: Import and manage custom agents created in Claude or Cursor:
+- `myai system integration-import -i claude` - Import custom agents from `~/.claude/agents/`
+- Custom agents are marked with source indicator: `my-agent (claude)`
+- Original files are preserved (not moved or modified)
+- Custom agents persist across MyAI updates and are preserved during uninstall
+- Metadata stored in `~/.myai/config/custom_agents.json`
+- Fully manageable through MyAI (enable/disable/list/show)
+
 ## MyAI Commands
 - `myai install all` - Complete installation (global + project)
-- `myai agent list` - List all available agents
+- `myai agent list` - List all available agents (custom agents show with source indicator)
 - `myai system integration-health` - Check integration status
+- `myai system integration-import -i claude` - Import custom agents from Claude
+- `myai system integration-list` - List available integrations
+- `myai uninstall` - Uninstall MyAI (preserves custom agents)
 
 ## Agent-OS Integration
 **New**: MyAI now includes full Agent-OS integration for structured AI-driven development:

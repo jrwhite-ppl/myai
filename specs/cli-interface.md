@@ -148,6 +148,34 @@ Examples:
   myai migrate agent-os           # Import Agent-OS setup
 ```
 
+### 6. System Commands
+```bash
+myai system [COMMAND] [OPTIONS]
+
+Commands:
+  doctor                Run system diagnostics
+  integration-list      List available integrations
+  integration-health    Check integration health
+  integration-import    Import agents from integrations
+  integration-validate  Validate integration configs
+  integration-backup    Backup integration configs
+  backup               Create system backup
+  restore              Restore from backup
+  clean                Clean temporary files
+
+Options:
+  --integration, -i     Specific integration(s)
+  --backup             Create backup before operations
+  --merge              Merge with existing
+  --force              Force operation
+
+Examples:
+  myai system doctor                        # Run diagnostics
+  myai system integration-import -i claude  # Import custom agents
+  myai system integration-health            # Check all integrations
+  myai system backup                        # Create full backup
+```
+
 ## Interactive Features
 
 ### 1. Guided Setup Wizard
@@ -159,7 +187,7 @@ Welcome to MyAI Setup Wizard! 🚀
 [1/5] Configuration Scope
 Which configuration level would you like to set up?
 > ● User (personal settings)
-  ○ Team (shared team settings)  
+  ○ Team (shared team settings)
   ○ Project (project-specific)
   ○ Enterprise (organization-wide)
 
@@ -237,7 +265,7 @@ Opening editor for customization...
 ```
 $ myai agent list
 
-                          Available Agents                           
+                          Available Agents
 ┏━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━━┓
 ┃ Name               ┃ Category      ┃ Status     ┃ Last Used   ┃
 ┡━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━━┩
@@ -268,7 +296,7 @@ $ myai agent list --format json
 ```
 $ myai sync all
 
-Synchronizing configurations... 
+Synchronizing configurations...
 ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━┓
 ┃ Task                         ┃ Status    ┃
 ┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━┩
@@ -306,7 +334,7 @@ $ myai agent create "invalid name"
 Agent name 'invalid name' is invalid:
   ✗ Contains spaces (use underscores instead)
   ✗ Must be lowercase
-  
+
 Valid example: 'invalid_name'
 
 Try again with a valid name.
@@ -421,7 +449,7 @@ MyAI Help System 📚
 
 What would you like help with?
 1. Getting Started
-2. Configuration Management  
+2. Configuration Management
 3. Agent Management
 4. Tool Integration
 5. Troubleshooting

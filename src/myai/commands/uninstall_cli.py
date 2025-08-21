@@ -72,9 +72,13 @@ def uninstall(
             registry = get_agent_registry()
             agents = registry.list_agents()
 
-            # Build list of our .md files to remove
+            # Build list of our .md files to remove (excluding custom agents)
             our_agent_files = []
             for agent in agents:
+                # Skip custom/imported agents - they should not be removed
+                if getattr(agent, "is_custom", False):
+                    continue
+
                 if hasattr(agent, "metadata") and hasattr(agent.metadata, "name"):
                     agent_name = agent.metadata.name
                 elif hasattr(agent, "name"):
@@ -108,9 +112,13 @@ def uninstall(
                 registry = get_agent_registry()
                 agents = registry.list_agents()
 
-                # Build list of our .md files to remove
+                # Build list of our .md files to remove (excluding custom agents)
                 our_agent_files = []
                 for agent in agents:
+                    # Skip custom/imported agents - they should not be removed
+                    if hasattr(agent, "is_custom") and agent.is_custom:
+                        continue
+
                     if hasattr(agent, "metadata") and hasattr(agent.metadata, "name"):
                         agent_name = agent.metadata.name
                     elif hasattr(agent, "name"):
@@ -141,9 +149,13 @@ def uninstall(
             registry = get_agent_registry()
             agents = registry.list_agents()
 
-            # Build list of our .mdc files to remove
+            # Build list of our .mdc files to remove (excluding custom agents)
             our_mdc_files = []
             for agent in agents:
+                # Skip custom/imported agents - they should not be removed
+                if getattr(agent, "is_custom", False):
+                    continue
+
                 if hasattr(agent, "metadata") and hasattr(agent.metadata, "name"):
                     agent_name = agent.metadata.name
                 elif hasattr(agent, "name"):
