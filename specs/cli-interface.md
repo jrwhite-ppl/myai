@@ -82,11 +82,12 @@ Commands:
   list       List available agents
   show       Show agent details
   search     Search agents
-  create     Create new agent
+  create     Create new agent (with Claude SDK)
   edit       Edit existing agent
   delete     Delete agent
   enable     Enable agent
   disable    Disable agent
+  test       Test agent with Claude SDK
   sync       Sync agents to tools
   validate   Validate agent specs
   recommend  Recommend agents for task
@@ -97,7 +98,8 @@ Examples:
   myai agent list --category engineering     # List by category
   myai agent show lead_developer            # Show agent details
   myai agent search "python backend"        # Search agents
-  myai agent create my-expert --interactive # Create interactively
+  myai agent create my-expert --interactive # Create with Claude SDK
+  myai agent test my-expert "Test prompt"   # Test with Claude SDK
   myai agent sync claude --all              # Sync all to Claude
   myai agent recommend "build REST API"     # Get recommendations
 ```

@@ -339,7 +339,7 @@ class ClaudeAdapter(AbstractAdapter):
             raise AdapterConfigError(msg, self.name) from e
 
     async def sync_agents(self, agents: List[Any], *, dry_run: bool = False) -> Dict[str, Any]:
-        """Sync agents to Claude Code."""
+        """Sync agents to Claude Code using SDK-compatible format."""
         result = {
             "status": "success",
             "synced": 0,
@@ -364,12 +364,29 @@ class ClaudeAdapter(AbstractAdapter):
         if not dry_run:
             agents_dir.mkdir(parents=True, exist_ok=True)
 
+        # Try to use Claude SDK for enhanced formatting
+        try:
+            from myai.integrations.claude_sdk import get_claude_sdk_integration
+
+            sdk = get_claude_sdk_integration()
+            use_sdk = True
+        except Exception:
+            sdk = None
+            use_sdk = False
+
         for agent in agents:
             try:
                 # Extract agent information
                 if hasattr(agent, "metadata") and hasattr(agent.metadata, "name"):
                     name = str(agent.metadata.name)
-                    content = str(getattr(agent, "content", ""))
+
+                    # Use SDK format if available
+                    if use_sdk and sdk:
+                        content = sdk.export_to_claude_format(agent)
+                    elif hasattr(agent, "to_markdown"):
+                        content = agent.to_markdown()
+                    else:
+                        content = str(getattr(agent, "content", ""))
                 elif hasattr(agent, "name"):
                     # Direct name attribute
                     name = str(agent.name)
@@ -388,7 +405,7 @@ class ClaudeAdapter(AbstractAdapter):
                 agent_file = agents_dir / f"{name}.md"
 
                 if not dry_run:
-                    # Write agent content
+                    # Write agent content in Claude SDK format
                     with open(agent_file, "w", encoding="utf-8") as f:
                         f.write(content)
 
@@ -402,6 +419,17 @@ class ClaudeAdapter(AbstractAdapter):
 
         if result["errors"]:
             result["status"] = "partial" if result["synced"] > 0 else "error"
+
+        # If SDK is available, validate the agents
+        if use_sdk and sdk and not dry_run:
+            try:
+                for agent in agents:
+                    if hasattr(agent, "metadata") and hasattr(agent.metadata, "name"):
+                        issues = sdk.validate_agent_for_sdk(agent)
+                        if issues:
+                            result["warnings"].extend([f"{agent.metadata.name}: {issue}" for issue in issues])
+            except Exception:  # noqa: S110
+                pass  # Validation is optional
 
         return result
 

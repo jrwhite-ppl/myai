@@ -20,6 +20,7 @@ dependencies = [
     "PyYAML>=6.0",
     "toml>=0.10.0",
     "keyring>=24.0.0",
+    "anthropic>=0.39.0",
 ]
 
 [project.scripts]
@@ -63,6 +64,7 @@ addopts = "--durations=10"
 [tool.ruff]
 target-version = "py37"
 line-length = 120
+extend-exclude = ["temp/"]
 
 [tool.ruff.lint]
 select = [

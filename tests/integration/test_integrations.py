@@ -341,6 +341,10 @@ class TestClaudeAdapter:
         # Mock config path
         adapter._config_paths = [temp_config_dir]
 
+        # Create agents directory
+        agents_dir = temp_config_dir / "agents"
+        agents_dir.mkdir(parents=True, exist_ok=True)
+
         # Create a proper mock agent
         mock_agent = MagicMock()
         mock_metadata = MagicMock()
@@ -348,9 +352,16 @@ class TestClaudeAdapter:
         mock_agent.metadata = mock_metadata
         mock_agent.content = "Test content"
 
+        # Mock the to_markdown method to return proper content
+        mock_agent.to_markdown.return_value = "Test content"
+
         agents = [mock_agent]
 
         result = await adapter.sync_agents(agents)
+
+        # Print result for debugging
+        if result["status"] != "success":
+            print(f"Sync failed with result: {result}")
 
         assert result["status"] == "success"
         assert result["synced"] == 1

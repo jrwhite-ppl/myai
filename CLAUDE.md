@@ -3,6 +3,37 @@
 ## Important: Python Command Execution
 **ALWAYS use `uv run` for Python commands** - e.g., `uv run python -m myai ...`
 
+## Claude SDK Integration 🚀
+**New**: MyAI now integrates with Claude Code SDK for enhanced agent creation and testing!
+
+### Agent Creation with Claude SDK
+```bash
+# Create agent with Claude SDK refinement (default)
+myai agent create my-expert --interactive
+
+# Create without SDK
+myai agent create my-expert --no-claude-sdk
+```
+
+When creating an agent, MyAI will:
+1. Create the basic agent structure
+2. Launch Claude SDK for interactive refinement
+3. Help you perfect your agent with Claude's assistance
+
+### Testing Agents with Claude SDK
+```bash
+# Test an agent with a specific prompt
+myai agent test my-expert "Analyze this Python code for security issues"
+
+# Test without SDK (not yet implemented)
+myai agent test my-expert "Test prompt" --no-claude-sdk
+```
+
+### SDK Requirements
+- Node.js 18+
+- Claude CLI: `npm install -g @anthropic-ai/claude-code`
+- Claude SDK for Python: `pip install claude-code-sdk` (automatically installed with MyAI)
+
 ## Comprehensive Install Command
 **New**: `myai install all` now provides complete setup:
 1. Sets up global `~/.myai` directory with all default agents
@@ -13,10 +44,11 @@
 
 ## Claude Integration
 **Path**: `~/.claude/agents/`
-- Global agent files stored as `.md` files
+- Global agent files stored as `.md` files in SDK-compatible format
 - Project configuration in `.claude/settings.local.json`
 - Project config references global agents via `agentsPath`
 - All 23 default agents available in Claude Code
+- Agents synced with proper Claude SDK formatting
 
 ## Cursor Integration - Project-Level Only
 **Path**: `.cursor/` (in each project)

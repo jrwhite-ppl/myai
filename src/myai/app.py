@@ -78,7 +78,29 @@ def version(
 
 @app.command()
 def status(ctx: typer.Context):
-    """Show comprehensive system status and overview."""
+    """Show comprehensive system status and overview.
+
+    This command displays:
+    - System information (platform, Python version, MyAI paths)
+    - Agent statistics (total, enabled, categories)
+    - Configuration status with actionable next steps
+    - Integration status for Claude and Cursor
+
+    Use this command to:
+    - Check if MyAI is properly configured
+    - See which agents are enabled
+    - Troubleshoot configuration issues
+    - Get guidance on next steps
+
+    Examples:
+      myai status                    # Show full status
+      myai status --output json     # JSON output for scripts
+
+    Related commands:
+      myai install all              # Set up all integrations
+      myai agent list               # See available agents
+      myai system integration-health # Check integrations
+    """
     import platform
     import sys
 
@@ -174,30 +196,68 @@ def status(ctx: typer.Context):
             if user_config_path and user_config_path.exists():
                 status_table.add_row("User Config", "✅ OK", str(user_config_path))
             else:
-                status_table.add_row("User Config", "⚠️  Not Set", "Using defaults")
+                status_table.add_row(
+                    "User Config", "⚠️  Not Set", "[dim]Using defaults • Run 'myai config set' to customize[/dim]"
+                )
 
             project_config_path = config_manager.get_config_path("project")
             if project_config_path and project_config_path.exists():
                 status_table.add_row("Project Config", "✅ OK", str(project_config_path))
             else:
-                status_table.add_row("Project Config", "⚠️  Not Set", "No project config")
+                status_table.add_row(
+                    "Project Config",
+                    "⚠️  Not Set",
+                    "[dim]No project config • Run 'myai install project' for project setup[/dim]",
+                )
 
             # Integration status
             claude_path = Path.home() / ".claude" / "agents"
             if claude_path.exists():
                 claude_count = len(list(claude_path.glob("*.md")))
-                status_table.add_row("Claude Integration", "✅ OK", f"{claude_count} agents synced")
+                status_table.add_row("Claude Integration", "✅ OK", f"{claude_count} agents synced to Claude Code")
             else:
-                status_table.add_row("Claude Integration", "❌ Not Setup", "Run 'myai install all'")
+                status_table.add_row(
+                    "Claude Integration",
+                    "❌ Not Setup",
+                    "[dim]Claude Code integration not configured • Run 'myai install all'[/dim]",
+                )
 
             cursor_path = Path.cwd() / ".cursor" / "rules"
             if cursor_path.exists():
                 cursor_count = len(list(cursor_path.glob("*.mdc")))
-                status_table.add_row("Cursor Integration", "✅ OK", f"{cursor_count} rules active")
+                status_table.add_row("Cursor Integration", "✅ OK", f"{cursor_count} rules active in project")
             else:
-                status_table.add_row("Cursor Integration", "❌ Not Setup", "Run 'myai install all'")
+                status_table.add_row(
+                    "Cursor Integration",
+                    "❌ Not Setup",
+                    "[dim]Cursor rules not configured • Run 'myai install all' in project[/dim]",
+                )
 
             console.print(status_table)
+
+            # Add next steps section for unconfigured items
+            needs_setup = []
+            if not user_config_path or not user_config_path.exists():
+                needs_setup.append("User configuration")
+            if not project_config_path or not project_config_path.exists():
+                needs_setup.append("Project configuration")
+            if not claude_path.exists():
+                needs_setup.append("Claude Code integration")
+            if not cursor_path.exists():
+                needs_setup.append("Cursor integration")
+
+            if needs_setup:
+                console.print()
+                next_steps_panel = Panel(
+                    "[bold yellow]Recommended Next Steps:[/bold yellow]\n\n"
+                    "• Run [cyan]myai install all[/cyan] for complete setup\n"
+                    "• Run [cyan]myai agent list[/cyan] to see available agents\n"
+                    "• Run [cyan]myai agent enable <name>[/cyan] to enable specific agents\n"
+                    "• Check [cyan]myai system integration-health[/cyan] for detailed diagnostics",
+                    title="🚀 Getting Started",
+                    border_style="yellow",
+                )
+                console.print(next_steps_panel)
 
     except Exception as e:
         console.print(f"[red]Error getting system status: {e}[/red]")
@@ -211,7 +271,7 @@ def create_app():
     app.add_typer(install_cli.app, name="install", help="📦 Installation and configuration commands")
     app.add_typer(uninstall_cli.app, name="uninstall", help="🗑️ Uninstall MyAI components")
     app.add_typer(config_cli.app, name="config", help="📝 Configuration management commands")
-    app.add_typer(agent_cli.app, name="agent", help="🤖 Agent management commands")
+    app.add_typer(agent_cli.app, name="agent")
     app.add_typer(system_cli.app, name="system", help="🔧 System utilities, integrations, and diagnostics")
     app.add_typer(wizard_cli.app, name="wizard", help="🧙 Interactive wizards and guided workflows")
     return app

@@ -1,5 +1,111 @@
 # MyAI Implementation Tasks
 
+## Current Status (Updated: 2025-08-22)
+
+### CLI User Experience Review (2025-08-22)
+Based on comprehensive user testing, the following improvements have been identified:
+
+#### General Patterns
+- **Help Documentation**: All commands need expanded help text with:
+  - Clear explanation of what the command does
+  - When and why to use it
+  - Expected outcomes
+  - Examples of common usage
+  - Related commands
+  - Domain concept explanations
+
+- **Command Feedback**: All commands need more informative output:
+  - What was done (created, updated, skipped)
+  - Where files/changes are located
+  - What the action means in practical terms
+  - Next steps or related commands
+
+#### Specific Command Issues
+
+**1. `myai version`**
+- Works well, already has `--short` flag
+- Consider adding version source/origin info
+
+**2. `myai status`**
+- Add actionable hints for "Not Set" items
+- Clarify what "Integration" means
+- Add "Next Steps" section when unconfigured
+- Location: `/src/myai/app.py` lines 79-206
+
+**3. `myai install all`**
+- Add status indicators (created vs exists)
+- Add contextual descriptions in gray text
+- Show summary of what was installed/updated
+- Location: `/src/myai/commands/install_cli.py`
+
+**4. `myai agent show <name>`**
+- Add agent content preview box
+- Consider `--full` flag for complete content
+- Location: `/src/myai/commands/agent_cli.py`
+
+**5. `myai agent create`**
+- Better ANTHROPIC_API_KEY error handling (guide setup)
+- Add verbose feedback during creation
+- Show post-creation options
+- Location: `/src/myai/commands/agent_cli.py`
+
+**6. `myai agent enable/disable`**
+- Explain what enabling/disabling does
+- Show what files were created/removed
+- Provide next steps
+- Location: `/src/myai/commands/agent_cli.py`
+
+**7. `myai agent edit`**
+- Add context header (file location, agent name)
+- Show agent metadata before editing
+- Location: `/src/myai/commands/agent_cli.py`
+
+**8. `myai agent validate`**
+- Show what was validated and against what
+- List specific checks performed
+- Add validation criteria explanation
+- Location: `/src/myai/commands/agent_cli.py`
+
+**9. `myai agent test`**
+- Better ANTHROPIC_API_KEY error handling
+- Show detailed progress and file locations
+- Location: `/src/myai/commands/agent_cli.py`
+
+**10. `myai agent diff`**
+- Better error handling with suggestions
+- Add visual diff with colors
+- Add text-only option
+- Location: `/src/myai/commands/agent_cli.py`
+
+**11. `myai config get`**
+- Make output consistent with agent list
+- Show formatted output instead of raw data
+- Location: `/src/myai/commands/config_cli.py`
+
+**12. `myai config set`**
+- Clear feedback about what was set and where
+- Show previous value if any
+- Location: `/src/myai/commands/config_cli.py`
+
+**13. `myai config validate`**
+- Show what files were validated
+- List validation rules applied
+- Show detailed results
+- Location: `/src/myai/commands/config_cli.py`
+
+**14. `myai system integration-list`**
+- Add descriptions for each integration
+- Explain what's being checked
+- Add installation instructions if not available
+- Consider merging with integration-health
+- Location: `/src/myai/commands/system_cli.py`
+
+**15. `myai system integration-import`**
+- Clarify purpose and expected outcome
+- Show detailed scan results
+- Explain why no agents were found
+- Location: `/src/myai/commands/system_cli.py`
+
 ## Current Status (Updated: 2025-08-19)
 
 ### Recent Updates
@@ -623,6 +729,64 @@ This document provides a comprehensive, granular breakdown of all tasks required
   - [ ] Improve validation
   - [ ] Enhance sanitization
   - [ ] Update security measures
+
+### Phase 8.5: CLI User Experience Improvements (Priority)
+
+#### 8.5.1 Help Documentation Enhancement
+- [ ] Create comprehensive help style guide
+  - [ ] Define help text standards
+  - [ ] Create help template for commands
+  - [ ] Add domain concept glossary
+  - [ ] Implement help text generator
+- [ ] Update all command help texts
+  - [ ] Expand main command descriptions
+  - [ ] Add usage examples to all commands
+  - [ ] Add "See Also" sections
+  - [ ] Include common workflows
+- [ ] Add contextual help system
+  - [ ] Implement --verbose-help flag
+  - [ ] Add interactive help mode
+  - [ ] Create help search functionality
+
+#### 8.5.2 Command Output Enhancement
+- [ ] Improve feedback for all commands
+  - [ ] Add detailed action reporting
+  - [ ] Show file locations consistently
+  - [ ] Add next steps suggestions
+  - [ ] Implement progress indicators
+- [ ] Enhance specific commands
+  - [ ] `myai status` - Add actionable hints
+  - [ ] `myai install all` - Add status indicators
+  - [ ] `myai agent show` - Add content preview
+  - [ ] `myai agent create` - Add verbose feedback
+  - [ ] `myai agent enable/disable` - Explain impacts
+  - [ ] `myai agent validate` - Show detailed checks
+  - [ ] `myai config get/set` - Improve formatting
+  - [ ] `myai system integration-*` - Add descriptions
+
+#### 8.5.3 Error Handling Improvements
+- [ ] Implement graceful API key handling
+  - [ ] Guide users through setup
+  - [ ] Provide clear instructions
+  - [ ] Add fallback options
+  - [ ] Remember user preferences
+- [ ] Enhance error messages
+  - [ ] Add recovery suggestions
+  - [ ] Show similar commands/agents
+  - [ ] Provide troubleshooting links
+  - [ ] Add debug information option
+
+#### 8.5.4 Visual Enhancements
+- [ ] Improve diff visualization
+  - [ ] Add colored diff output
+  - [ ] Implement side-by-side view
+  - [ ] Add summary statistics
+  - [ ] Create text-only option
+- [ ] Enhance list/table displays
+  - [ ] Add consistent formatting
+  - [ ] Improve column alignment
+  - [ ] Add sorting options
+  - [ ] Implement filtering
 
 ### Phase 9: Documentation and Polish (Week 10)
 

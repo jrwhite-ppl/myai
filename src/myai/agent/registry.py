@@ -106,6 +106,9 @@ class AgentRegistry:
             # Load custom agents from tracker
             self._load_custom_agents()
 
+            # Load all agents from storage (including JSON agents)
+            self._load_agents_from_storage()
+
     def register_agent(
         self,
         agent: AgentSpecification,
@@ -218,6 +221,98 @@ class AgentRegistry:
             return loaded_agent
 
         return None
+
+    def resolve_agent_name(self, name_or_display: str) -> Optional[str]:
+        """
+        Resolve an agent name from either the internal name or display name.
+
+        Args:
+            name_or_display: Either the agent's internal name or display name
+
+        Returns:
+            The agent's internal name if found, None otherwise
+        """
+        # First try direct lookup by internal name
+        if self.get_agent(name_or_display):
+            return name_or_display
+
+        # If not found, search by display name
+        with self._index_lock:
+            for agent_name, agent in self._agents_by_name.items():
+                if agent.metadata.display_name.lower() == name_or_display.lower():
+                    return agent_name
+
+        # Also check storage in case index is incomplete
+        stored_agents = self._agent_storage.list_agents()
+        for stored_name in stored_agents:
+            loaded_agent = self._agent_storage.load_agent(stored_name)
+            if loaded_agent is not None and loaded_agent.metadata.display_name.lower() == name_or_display.lower():
+                return stored_name
+
+        return None
+
+    def unregister_agent(self, name: str) -> bool:
+        """
+        Unregister an agent from the registry.
+
+        Args:
+            name: Agent name to unregister
+
+        Returns:
+            True if agent was unregistered, False if not found
+        """
+        with self._index_lock:
+            if name not in self._agents_by_name:
+                return False
+
+            agent = self._agents_by_name[name]
+
+            # Remove from all indexes
+            del self._agents_by_name[name]
+
+            # Remove from category index
+            category = agent.metadata.category.value
+            if category in self._agents_by_category and name in self._agents_by_category[category]:
+                self._agents_by_category[category].remove(name)
+                if not self._agents_by_category[category]:
+                    del self._agents_by_category[category]
+
+            # Remove from tool index
+            for tool in agent.metadata.tools:
+                if tool in self._agents_by_tool and name in self._agents_by_tool[tool]:
+                    self._agents_by_tool[tool].remove(name)
+                    if not self._agents_by_tool[tool]:
+                        del self._agents_by_tool[tool]
+
+            # Remove from tag index
+            for tag in agent.metadata.tags:
+                if tag in self._agents_by_tag and name in self._agents_by_tag[tag]:
+                    self._agents_by_tag[tag].remove(name)
+                    if not self._agents_by_tag[tag]:
+                        del self._agents_by_tag[tag]
+
+            # Remove from custom agents
+            if name in self._custom_agents:
+                self._custom_agents.remove(name)
+
+            # Remove from source index
+            if agent.source and agent.source in self._agents_by_source:
+                if name in self._agents_by_source[agent.source]:
+                    self._agents_by_source[agent.source].remove(name)
+                    if not self._agents_by_source[agent.source]:
+                        del self._agents_by_source[agent.source]
+
+            # Remove from enabled set
+            if name in self._enabled_agents:
+                self._enabled_agents.remove(name)
+
+            # Clear from cache
+            if self._cache_enabled:
+                with self._cache_lock:
+                    if name in self._cache:
+                        del self._cache[name]
+
+            return True
 
     def list_agents(
         self,
@@ -416,6 +511,11 @@ class AgentRegistry:
                     # Skip unnamed agents (likely not real agent files)
                     if agent.metadata.name == "unnamed_agent":
                         continue
+
+                    # Skip deleted default agents
+                    if self._is_deleted_default_agent(agent.metadata.name):
+                        continue
+
                     # Register agent
                     self.register_agent(agent, persist=False, overwrite=True)
                     discovered.append(agent.metadata.name)
@@ -467,6 +567,9 @@ class AgentRegistry:
 
             # Reload custom agents from tracker
             self._load_custom_agents()
+
+            # Reload all agents from storage
+            self._load_agents_from_storage()
 
         # Restore custom agents (in case they weren't in tracker yet)
         for agent in custom_agents_backup.values():
@@ -585,6 +688,39 @@ class AgentRegistry:
         except Exception:  # noqa: S110
             # If tracker fails, continue without custom agents
             pass
+
+    def _load_agents_from_storage(self) -> None:
+        """Load all agents from storage (including JSON format agents)."""
+        try:
+            # Get all agents from storage
+            stored_agents = self._agent_storage.list_agents()
+
+            for agent_name in stored_agents:
+                # Skip if already loaded
+                if agent_name in self._agents_by_name:
+                    continue
+
+                # Try to load the agent
+                agent = self._agent_storage.load_agent(agent_name)
+                if agent:
+                    # Register without persisting (it's already in storage)
+                    self.register_agent(agent, persist=False, overwrite=False)
+
+        except Exception:  # noqa: S110
+            # If storage loading fails, continue
+            pass
+
+    def _is_deleted_default_agent(self, agent_name: str) -> bool:
+        """Check if agent is in the deleted default agents list."""
+        try:
+            from myai.config.manager import get_config_manager
+
+            config_manager = get_config_manager()
+            config = config_manager.get_config()
+            deleted_list = getattr(config.agents, "deleted_default_agents", [])
+            return agent_name in deleted_list
+        except Exception:
+            return False
 
     def _add_to_index(self, agent: AgentSpecification) -> None:
         """Add agent to all indexes without locking."""

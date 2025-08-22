@@ -39,6 +39,8 @@ class TestAgentCLIGlobalVsProject(unittest.TestCase):
         self.global_agent.metadata.tags = []
         self.global_agent.metadata.version = "1.0.0"
         self.global_agent.content = "# Global Agent Content"
+        self.global_agent.is_custom = False
+        self.global_agent.file_path = None
 
         self.project_agent = MagicMock()
         self.project_agent.metadata.name = "python-expert"
@@ -49,6 +51,8 @@ class TestAgentCLIGlobalVsProject(unittest.TestCase):
         self.project_agent.metadata.tags = []
         self.project_agent.metadata.version = "1.0.0"
         self.project_agent.content = "# Project Agent Content"
+        self.project_agent.is_custom = False
+        self.project_agent.file_path = None
 
     def tearDown(self):
         """Clean up test environment."""
@@ -80,6 +84,7 @@ class TestAgentCLIGlobalVsProject(unittest.TestCase):
         # Mock registry
         registry = MagicMock()
         registry.get_agent.return_value = self.global_agent
+        registry.resolve_agent_name.return_value = "agentos-project-manager"
         mock_registry.return_value = registry
 
         # Run enable with --global flag
@@ -140,6 +145,7 @@ class TestAgentCLIGlobalVsProject(unittest.TestCase):
         # Mock registry
         registry = MagicMock()
         registry.get_agent.return_value = self.project_agent
+        registry.resolve_agent_name.return_value = "python-expert"
         mock_registry.return_value = registry
 
         # Run enable without --global flag (project scope)
@@ -201,6 +207,7 @@ class TestAgentCLIGlobalVsProject(unittest.TestCase):
         # Mock registry
         registry = MagicMock()
         registry.get_agent.return_value = self.global_agent
+        registry.resolve_agent_name.return_value = "agentos-project-manager"
         mock_registry.return_value = registry
 
         # Run disable with --global flag
@@ -250,6 +257,7 @@ class TestAgentCLIGlobalVsProject(unittest.TestCase):
         # Mock registry
         registry = MagicMock()
         registry.get_agent.return_value = self.project_agent
+        registry.resolve_agent_name.return_value = "python-expert"
         mock_registry.return_value = registry
 
         # Run disable without --global flag (project scope)
@@ -303,14 +311,14 @@ class TestAgentCLIGlobalVsProject(unittest.TestCase):
         self.assertIn("Enabled", output, "Should show enabled status")
         self.assertIn("Project:", output, "Should show project status label")
 
-        # Verify both agents are listed
-        self.assertIn("agentos-project-manager", output)
-        self.assertIn("python-expert", output)
+        # Verify both agents are listed by their display names
+        self.assertIn("Agent-OS Project Manager", output)
+        self.assertIn("Python Expert", output)
 
     @patch("myai.commands.agent_cli.get_config_manager")
     @patch("myai.commands.agent_cli.get_agent_registry")
-    def test_list_agents_enabled_only_filters_correctly(self, mock_registry, mock_config_manager):
-        """Test that --enabled flag filters to show only enabled agents."""
+    def test_list_agents_shows_all_agents_with_status(self, mock_registry, mock_config_manager):
+        """Test that list command shows all agents with their status."""
         # Setup mock data
         disabled_agent = MagicMock()
         disabled_agent.metadata.name = "disabled-agent"
@@ -320,6 +328,9 @@ class TestAgentCLIGlobalVsProject(unittest.TestCase):
         disabled_agent.metadata.tools = []
         disabled_agent.metadata.tags = []
         disabled_agent.metadata.version = "1.0.0"
+        disabled_agent.content = "# Disabled Agent Content"
+        disabled_agent.is_custom = False
+        disabled_agent.file_path = None
 
         # Mock config with mixed agents
         config = MagicMock()
@@ -341,17 +352,21 @@ class TestAgentCLIGlobalVsProject(unittest.TestCase):
         mock_state.is_debug.return_value = False
         mock_state.output_format = "table"
 
-        # Run list with --enabled flag
-        result = self.runner.invoke(app, ["list", "--enabled"], obj=mock_state)
+        # Run list command
+        result = self.runner.invoke(app, ["list"], obj=mock_state)
 
         # Check command succeeded
         self.assertEqual(result.exit_code, 0, f"Command failed: {result.stdout}")
 
-        # Check that only enabled agents are shown
+        # Check that all agents are shown with correct status
         output = result.stdout
-        self.assertIn("agentos-project-manager", output, "Global enabled agent should be shown")
-        self.assertIn("python-expert", output, "Project enabled agent should be shown")
-        self.assertNotIn("disabled-agent", output, "Disabled agent should not be shown")
+        self.assertIn("Agent-OS Project Manager", output, "Global enabled agent should be shown")
+        self.assertIn("Python Expert", output, "Project enabled agent should be shown")
+        self.assertIn("Disabled Agent", output, "Disabled agent should be shown")
+
+        # Check status indicators
+        self.assertIn("Enabled", output, "Should show enabled status")
+        self.assertIn("Disabled", output, "Should show disabled status for disabled agents")
 
     @patch("myai.commands.agent_cli.Path.home")
     @patch("myai.commands.agent_cli.Path.cwd")
@@ -387,23 +402,7 @@ class TestAgentCLIGlobalVsProject(unittest.TestCase):
 
         # Now simulate what setup should do for Cursor - create project files for global agents
         # Since Cursor doesn't have global settings, global agents need project files too
-        project_cursor_dir = self.test_project / ".cursor" / "rules"
-        project_cursor_dir.mkdir(parents=True, exist_ok=True)
-
-        cursor_file = project_cursor_dir / "agentos-project-manager.mdc"
-        mdc_content = """---
-description: "Cursor rules for Agent-OS Project Manager"
-globs:
-alwaysApply: false
-version: 1.0
-encoding: UTF-8
----
-
-# Agent-OS Project Manager
-
-@myai/agents/engineering/agentos-project-manager.md
-"""
-        cursor_file.write_text(mdc_content)
+        _create_agent_files(self.global_agent, global_scope=False)
 
         # Verify both global Claude file and project Cursor file exist
         global_claude_file = self.test_home / ".claude" / "agents" / "agentos-project-manager.md"
@@ -412,9 +411,9 @@ encoding: UTF-8
         project_cursor_file = self.test_project / ".cursor" / "rules" / "agentos-project-manager.mdc"
         self.assertTrue(project_cursor_file.exists(), "Project Cursor file should exist for global agent")
 
-        # Verify project Claude file does NOT exist (global agents don't need project Claude wrappers)
+        # Verify project Claude file exists (when creating project files, both Claude and Cursor files are created)
         project_claude_file = self.test_project / ".claude" / "agents" / "agentos-project-manager.md"
-        self.assertFalse(project_claude_file.exists(), "Project Claude file should NOT exist for global agent")
+        self.assertTrue(project_claude_file.exists(), "Project Claude file should exist when creating project files")
 
 
 class TestAgentCLIFileManagement(unittest.TestCase):
@@ -491,14 +490,13 @@ class TestAgentCLIFileManagement(unittest.TestCase):
         self.assertTrue(project_claude_file.exists(), "Project Claude file should be created")
         self.assertTrue(project_cursor_file.exists(), "Project Cursor file should be created")
 
-        # Verify project Claude file is a wrapper (contains @myai/agents reference)
+        # Verify project Claude file contains actual agent content
         claude_content = project_claude_file.read_text()
-        self.assertIn("@myai/agents/test/test-agent.md", claude_content)
+        self.assertEqual(claude_content, "# Test Agent Content")
 
-        # Verify project Cursor file has proper structure
+        # Verify project Cursor file contains actual agent content
         cursor_content = project_cursor_file.read_text()
-        self.assertIn('description: "Cursor rules for Test Agent"', cursor_content)
-        self.assertIn("@myai/agents/test/test-agent.md", cursor_content)
+        self.assertEqual(cursor_content, "# Test Agent Content")
 
         # Verify no global files were created
         global_claude_dir = self.test_home / ".claude" / "agents"

@@ -437,3 +437,79 @@ This is the second discovered agent.
 
         # No errors should occur
         assert len(errors) == 0
+
+    def test_resolve_agent_name_by_internal_name(self, temp_dir):
+        """Test resolving agent by internal name."""
+        registry = AgentRegistry(base_path=temp_dir, auto_discover=False)
+
+        # Create agent with hyphenated name
+        metadata = AgentMetadata(
+            name="python-expert",
+            display_name="Python Expert",
+            version="1.0.0",
+            description="A Python expert",
+            category=AgentCategory.ENGINEERING,
+        )
+        agent = AgentSpecification(metadata=metadata, content="Python expert content")
+        registry.register_agent(agent)
+
+        # Should resolve by internal name
+        resolved = registry.resolve_agent_name("python-expert")
+        assert resolved == "python-expert"
+
+    def test_resolve_agent_name_by_display_name(self, temp_dir):
+        """Test resolving agent by display name."""
+        registry = AgentRegistry(base_path=temp_dir, auto_discover=False)
+
+        # Create agent with hyphenated name
+        metadata = AgentMetadata(
+            name="python-expert",
+            display_name="Python Expert",
+            version="1.0.0",
+            description="A Python expert",
+            category=AgentCategory.ENGINEERING,
+        )
+        agent = AgentSpecification(metadata=metadata, content="Python expert content")
+        registry.register_agent(agent)
+
+        # Should resolve by display name
+        resolved = registry.resolve_agent_name("Python Expert")
+        assert resolved == "python-expert"
+
+        # Should be case-insensitive
+        resolved = registry.resolve_agent_name("python expert")
+        assert resolved == "python-expert"
+
+    def test_resolve_agent_name_not_found(self, temp_dir):
+        """Test resolving non-existent agent name."""
+        registry = AgentRegistry(base_path=temp_dir, auto_discover=False)
+
+        # Should return None for non-existent agent
+        resolved = registry.resolve_agent_name("non-existent")
+        assert resolved is None
+
+    def test_resolve_agent_name_from_storage(self, temp_dir):
+        """Test resolving agent name when agent is only in storage."""
+        # First registry instance
+        registry1 = AgentRegistry(base_path=temp_dir, auto_discover=False)
+
+        # Create and persist agent
+        metadata = AgentMetadata(
+            name="java-expert",
+            display_name="Java Expert",
+            version="1.0.0",
+            description="A Java expert",
+            category=AgentCategory.ENGINEERING,
+        )
+        agent = AgentSpecification(metadata=metadata, content="Java expert content")
+        registry1.register_agent(agent, persist=True)
+
+        # Clear the singleton
+        AgentRegistry._instance = None
+
+        # New registry instance (agent not in index yet)
+        registry2 = AgentRegistry(base_path=temp_dir, auto_discover=False)
+
+        # Should still resolve by display name from storage
+        resolved = registry2.resolve_agent_name("Java Expert")
+        assert resolved == "java-expert"

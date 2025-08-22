@@ -73,7 +73,19 @@ def get(
     ctx: typer.Context,
     key: str = typer.Argument(..., help="Configuration key to retrieve"),
 ):
-    """Get a specific configuration value."""
+    """Get a specific configuration value.
+
+    This command retrieves configuration values using dot notation.
+
+    Examples:
+      myai config get agents.enabled           # Get enabled agents list
+      myai config get integrations.claude      # Get Claude configuration
+      myai config get agents.global_enabled    # Get globally enabled agents
+
+    Related commands:
+      myai config set <key> <value>    # Set configuration value
+      myai config show                 # Show all configuration
+    """
     state: AppState = ctx.obj
 
     try:
@@ -83,11 +95,23 @@ def get(
         if state.output_format == "json":
             formatter = get_formatter("json", console)
             formatter.format({key: value})
+        elif isinstance(value, list):
+            if value:
+                console.print(f"[bold]{key}:[/bold]")
+                for item in value:
+                    console.print(f"  • {item}")
+            else:
+                console.print(f"[bold]{key}:[/bold] [dim](empty list)[/dim]")
+        elif isinstance(value, dict):
+            console.print(f"[bold]{key}:[/bold]")
+            for k, v in value.items():
+                console.print(f"  {k}: {v}")
         else:
-            console.print(f"{key}: {value}")
+            console.print(f"[bold]{key}:[/bold] {value}")
 
     except Exception as e:
         console.print(f"[red]Error getting configuration value: {e}[/red]")
+        console.print("[dim]Use 'myai config show' to see available configuration keys[/dim]")
         if state.is_debug():
             raise
 
@@ -99,7 +123,21 @@ def set_value(
     value: str = typer.Argument(..., help="Configuration value to set"),
     level: str = typer.Option("user", "--level", "-l", help="Configuration level to modify"),
 ):
-    """Set a configuration value."""
+    """Set a configuration value.
+
+    This command sets configuration values using dot notation.
+    The value will be automatically parsed to the correct type.
+
+    Examples:
+      myai config set agents.enabled "['python-expert','security-analyst']"  # Set list
+      myai config set integrations.claude.enabled true                       # Set boolean
+      myai config set user.name "John Doe"                                   # Set string
+
+    Related commands:
+      myai config get <key>        # Get configuration value
+      myai config show             # Show all configuration
+      myai config validate         # Validate configuration
+    """
     state: AppState = ctx.obj
 
     if state.is_debug():
@@ -107,19 +145,54 @@ def set_value(
 
     try:
         config_manager = get_config_manager()
+
+        # Get previous value for comparison
+        try:
+            previous_value = config_manager.get_config_value(key)
+        except Exception:
+            previous_value = None
+
         config_manager.set_config_value(key, value, level)
 
-        console.print(f"✅ Set {key} = {value} at {level} level")
+        console.print("✅ Configuration updated successfully")
+        console.print(f"[bold]Key:[/bold] {key}")
+        console.print(f"[bold]Level:[/bold] {level}")
+        if previous_value is not None:
+            console.print(f"[bold]Previous:[/bold] {previous_value}")
+        console.print(f"[bold]New Value:[/bold] {value}")
+        console.print(f"\n[dim]Use 'myai config get {key}' to verify the change[/dim]")
 
     except Exception as e:
         console.print(f"[red]Error setting configuration value: {e}[/red]")
+        console.print("[dim]Use 'myai config show' to see available configuration keys[/dim]")
         if state.is_debug():
             raise
 
 
 @app.command()
 def validate(ctx: typer.Context):
-    """Validate current configuration."""
+    """Validate current configuration.
+
+    This command performs comprehensive validation of your MyAI configuration
+    files, checking for syntax errors, required fields, and configuration
+    consistency across all levels.
+
+    Validation checks include:
+    - Configuration file syntax and format
+    - Required configuration fields
+    - Agent references and availability
+    - Integration settings validity
+    - Path existence and permissions
+    - Value type and range validation
+
+    Examples:
+      myai config validate              # Validate all configuration
+
+    Related commands:
+      myai config show                 # View current configuration
+      myai config set <key> <value>   # Fix configuration issues
+      myai status                      # Check overall system status
+    """
     state: AppState = ctx.obj
 
     if state.is_debug():
@@ -127,17 +200,72 @@ def validate(ctx: typer.Context):
 
     try:
         config_manager = get_config_manager()
+
+        console.print("[bold]🔍 Configuration Validation[/bold]")
+        console.print("[dim]Checking: Syntax, Required Fields, Agent References, Integrations, Paths[/dim]\n")
+
+        # Get validation results
         issues = config_manager.validate_configuration()
 
+        # Get configuration paths for context
+        user_config_path = config_manager.get_config_path("user")
+        project_config_path = config_manager.get_config_path("project")
+
+        # Create validation summary table
+        validation_table = Table(title="Validation Results", show_header=True, header_style="bold magenta")
+        validation_table.add_column("Check", style="cyan", no_wrap=True)
+        validation_table.add_column("Status", justify="center")
+        validation_table.add_column("Details", style="dim")
+
+        # Add configuration file checks
+        if user_config_path and user_config_path.exists():
+            validation_table.add_row("User Config", "✅ Found", str(user_config_path))
+        else:
+            validation_table.add_row("User Config", "⚠️  Missing", "Using default values")
+
+        if project_config_path and project_config_path.exists():
+            validation_table.add_row("Project Config", "✅ Found", str(project_config_path))
+        else:
+            validation_table.add_row("Project Config", "⚠️  Missing", "No project-specific settings")
+
+        # Add syntax validation
+        config = config_manager.get_config()
+        if config:
+            validation_table.add_row("Config Syntax", "✅ Valid", "All configuration files parse correctly")
+        else:
+            validation_table.add_row("Config Syntax", "❌ Invalid", "Configuration parsing failed")
+
+        # Add agent references check
+        try:
+            enabled_count = len(config.agents.enabled) if config and config.agents else 0
+            global_enabled_count = len(getattr(config.agents, "global_enabled", [])) if config and config.agents else 0
+            total_enabled = enabled_count + global_enabled_count
+            if total_enabled > 0:
+                validation_table.add_row("Agent References", "✅ Valid", f"{total_enabled} agents configured")
+            else:
+                validation_table.add_row("Agent References", "⚠️  Empty", "No agents enabled")
+        except Exception:
+            validation_table.add_row("Agent References", "❌ Error", "Could not validate agent references")
+
+        console.print(validation_table)
+        console.print()
+
         if not issues:
-            console.print("✅ Configuration is valid")
+            console.print("✅ Configuration validation passed")
+            console.print("[dim]All checks completed successfully - your configuration is ready to use[/dim]")
         else:
             console.print(f"❌ Found {len(issues)} configuration issues:")
-            for issue in issues:
-                console.print(f"  • {issue}")
+            console.print()
+            for i, issue in enumerate(issues, 1):
+                console.print(f"  {i}. {issue}")
+            console.print()
+            console.print(
+                "[dim]Fix these issues using 'myai config set <key> <value>' or by editing config files directly[/dim]"
+            )
 
     except Exception as e:
         console.print(f"[red]Error validating configuration: {e}[/red]")
+        console.print("[dim]This may indicate a corrupted configuration file or system issue[/dim]")
         if state.is_debug():
             raise
 

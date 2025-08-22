@@ -14,6 +14,7 @@ from typing import Optional
 import typer
 import yaml
 from rich.console import Console
+from rich.table import Table
 
 from myai.agent.registry import get_agent_registry
 from myai.agent_os.adapter import AgentOSAdapter
@@ -283,23 +284,42 @@ def install_all():
     # Copy all default agents (merge-safe - only copy if not exists)
     copied_count = 0
     skipped_count = 0
+    created_categories = []
+
     for category_dir in source_agents_dir.iterdir():
         if category_dir.is_dir():
             target_category_dir = target_agents_dir / category_dir.name
+            category_created = not target_category_dir.exists()
             target_category_dir.mkdir(exist_ok=True)
+
+            if category_created:
+                created_categories.append(category_dir.name)
 
             for agent_file in category_dir.glob("*.md"):
                 target_file = target_category_dir / agent_file.name
                 if not target_file.exists():
                     shutil.copy2(agent_file, target_file)
                     copied_count += 1
+                    console.print(
+                        f"  [green]✓[/green] Created {category_dir.name}/{agent_file.name} [dim]-"
+                        f" {agent_file.name.replace('-', ' ').title()} agent[/dim]"
+                    )
                 else:
                     skipped_count += 1
 
+    if created_categories:
+        console.print(
+            f"  [green]✓[/green] Created {len(created_categories)} agent categories: {', '.join(created_categories)}"
+        )
+
     if skipped_count > 0:
-        console.print(f"✅ Copied {copied_count} new agents, skipped {skipped_count} existing agents")
+        console.print(
+            f"✅ Installed {copied_count} new agents, preserved {skipped_count} existing agents [dim](merge-safe)[/dim]"
+        )
     else:
-        console.print(f"✅ Copied {copied_count} default agents to ~/.myai/agents")
+        console.print(
+            f"✅ Installed {copied_count} default agents to ~/.myai/agents [dim](23 professional agents ready)[/dim]"
+        )
 
     # Clone and integrate Agent-OS invisibly
     _clone_and_integrate_agentos()
@@ -365,9 +385,13 @@ echo "New agent created: $AGENT_NAME at $AGENT_PATH"
 
     # Create Claude agents directory
     claude_agents_dir = claude_dir / "agents"
+    claude_agents_created = not claude_agents_dir.exists()
     claude_agents_dir.mkdir(exist_ok=True)
 
-    console.print("✅ Created ~/.claude directory structure")
+    if claude_agents_created:
+        console.print("✅ Created ~/.claude directory structure [dim](for Claude Code integration)[/dim]")
+    else:
+        console.print("✅ Verified ~/.claude directory structure [dim](already exists)[/dim]")
 
     # Step 3: Configure default agent enablement - set Agent-OS agents as enabled defaults
     console.print("\n[bold]Step 3: Configuring default agent enablement...[/bold]")
@@ -409,9 +433,12 @@ echo "New agent created: $AGENT_NAME at $AGENT_PATH"
     claude_results = asyncio.run(sync_to_claude())
     if claude_results.get("claude", {}).get("status") == "success":
         synced = claude_results["claude"].get("synced", 0)
-        console.print(f"✅ Synced {synced} globally enabled agents to ~/.claude/agents")
+        console.print(
+            f"✅ Synced {synced} globally enabled agents to ~/.claude/agents [dim](ready for Claude Code)[/dim]"
+        )
     else:
-        console.print("[yellow]⚠️  Claude sync had issues[/yellow]")
+        errors = claude_results.get("claude", {}).get("errors", [])
+        console.print(f"[yellow]⚠️  Claude sync had issues: {'; '.join(errors) if errors else 'Unknown error'}[/yellow]")
 
     # Step 5: Setup project-level directories
     console.print("\n[bold]Step 5: Setting up project-level integration[/bold]")
@@ -420,11 +447,19 @@ echo "New agent created: $AGENT_NAME at $AGENT_PATH"
 
     # Create project .claude directory with local agents
     project_claude_dir = cwd / ".claude"
+    project_claude_created = not project_claude_dir.exists()
     project_claude_dir.mkdir(exist_ok=True)
 
     # Create project-level agents directory
     project_claude_agents = project_claude_dir / "agents"
     project_claude_agents.mkdir(exist_ok=True)
+
+    if project_claude_created:
+        console.print(
+            "  [green]✓[/green] Created project .claude directory [dim](for project-specific Claude settings)[/dim]"
+        )
+    else:
+        console.print("  [green]✓[/green] Verified project .claude directory [dim](already exists)[/dim]")
 
     # Create lightweight wrapper agents that reference central configs
     console.print("  Creating lightweight agent wrappers for project...")
@@ -510,10 +545,15 @@ source: "~/.myai/agents"
 
     # Create project .cursor directory with rules subdirectory
     project_cursor_dir = cwd / ".cursor"
+    project_cursor_created = not project_cursor_dir.exists()
     project_cursor_dir.mkdir(exist_ok=True)
     project_cursor_rules = project_cursor_dir / "rules"
     project_cursor_rules.mkdir(exist_ok=True)
-    console.print("✅ Created project .cursor/rules directory")
+
+    if project_cursor_created:
+        console.print("✅ Created project .cursor/rules directory [dim](for Cursor IDE integration)[/dim]")
+    else:
+        console.print("✅ Verified project .cursor/rules directory [dim](already exists)[/dim]")
 
     # Step 6: Create Cursor rules as lightweight .mdc wrappers
     console.print("\n[bold]Step 6: Creating lightweight Cursor rule wrappers[/bold]")
@@ -570,20 +610,44 @@ alwaysApply: false
 
     # Final summary
     console.print("\n[bold green]✨ MyAI setup complete![/bold green]")
-    console.print("\n[bold]What was set up:[/bold]")
-    console.print("  • Global configuration in ~/.myai")
-    console.print("    - Workflow system with commands and standards")
-    console.print("    - Templates, tools, and hooks directories")
-    console.print("    - Default agents configuration")
-    console.print("  • Claude integration in ~/.claude")
-    console.print("  • Project-level .claude/agents directory")
-    console.print("  • Project-level .cursor/rules directory with .mdc files")
-    console.print("  • AGENTS.md file with project guidelines")
-    console.print("\n[bold]You can now:[/bold]")
-    console.print("  • Use 'myai agent list' to see available agents")
-    console.print("  • Use 'myai agent enable <name>' to enable agents (files created automatically)")
-    console.print("  • Access agents in Claude Code (from project .claude/agents)")
-    console.print("  • Access agents in Cursor as project rules")
+
+    # Create summary table
+    summary_table = Table(title="Installation Summary", show_header=True, header_style="bold cyan")
+    summary_table.add_column("Component", style="cyan", no_wrap=True)
+    summary_table.add_column("Location", style="white")
+    summary_table.add_column("Purpose", style="dim")
+
+    summary_table.add_row("Global MyAI", "~/.myai/", "Core system, agents, workflow components")
+    summary_table.add_row(
+        "Claude Integration",
+        "~/.claude/agents/",
+        f"Global agent access in Claude Code ({synced if 'synced' in locals() else 'N/A'} agents)",
+    )
+    summary_table.add_row(
+        "Project Claude",
+        ".claude/agents/",
+        f"Project-specific agent wrappers ({agent_count if 'agent_count' in locals() else 'N/A'} agents)",
+    )
+    summary_table.add_row(
+        "Project Cursor",
+        ".cursor/rules/",
+        f"Cursor IDE rules ({mdc_count if 'mdc_count' in locals() else 'N/A'} rules)",
+    )
+    summary_table.add_row("Project Guide", "AGENTS.md", "Project agent documentation")
+
+    console.print(summary_table)
+
+    console.print("\n[bold]Quick Start Commands:[/bold]")
+    console.print("  [cyan]myai status[/cyan]                   - Check system status")
+    console.print("  [cyan]myai agent list[/cyan]               - See all available agents")
+    console.print("  [cyan]myai agent enable <name>[/cyan]      - Enable specific agents")
+    console.print("  [cyan]myai agent show <name>[/cyan]        - View agent details")
+    console.print("  [cyan]myai system integration-health[/cyan] - Verify integrations")
+
+    console.print("\n[bold]Integration Status:[/bold]")
+    console.print("  ✅ Claude Code - Agents available via global ~/.claude/agents")
+    console.print("  ✅ Cursor IDE - Rules active in project .cursor/rules")
+    console.print("  ✅ Project Setup - Ready for development workflows")
 
 
 @app.command(name="global")

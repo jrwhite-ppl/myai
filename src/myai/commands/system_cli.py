@@ -606,7 +606,27 @@ def list_integrations(
     available: bool = typer.Option(False, "--available", help="Show available integrations"),  # noqa: FBT001
     status: bool = typer.Option(True, "--status", help="Show integration status"),  # noqa: FBT001
 ):
-    """List available and active integrations."""
+    """List MyAI integrations with development tools.
+
+    MyAI integrates with popular development tools to sync agents and
+    configurations. This command shows which tools are available and
+    their current status.
+
+    Integrations include:
+    - Claude Code: Global agent access via ~/.claude/agents/
+    - Cursor IDE: Project-specific rules via .cursor/rules/
+    - VS Code: Agent integration via extensions
+    - Custom tools: API-based integrations
+
+    Examples:
+      myai system integration-list                # Show active integrations
+      myai system integration-list --available   # Discover available tools
+
+    Related commands:
+      myai system integration-health             # Check integration health
+      myai system integration-import -i claude   # Import custom agents
+      myai install all                          # Set up integrations
+    """
     state: AppState = ctx.obj
 
     if state.is_debug():
@@ -713,7 +733,27 @@ def integration_health(
     ctx: typer.Context,
     integration: Optional[str] = typer.Argument(None, help="Specific integration to check"),
 ):
-    """Perform health checks on integrations."""
+    """Perform comprehensive health checks on tool integrations.
+
+    This command diagnoses integration issues by checking:
+    - Tool installation and version compatibility
+    - Configuration file existence and validity
+    - Directory structure and permissions
+    - Agent sync status and file integrity
+    - Network connectivity for API-based tools
+
+    Health checks help troubleshoot problems with agent syncing,
+    missing files, or configuration errors.
+
+    Examples:
+      myai system integration-health           # Check all integrations
+      myai system integration-health claude   # Check Claude Code only
+
+    Related commands:
+      myai system integration-list            # See available integrations
+      myai status                             # Overall system status
+      myai install all                       # Fix integration setup
+    """
     state: AppState = ctx.obj
 
     if state.is_debug():
@@ -820,7 +860,33 @@ def import_agents(
     backup: bool = typer.Option(True, "--backup/--no-backup", help="Create backup before import"),  # noqa: FBT001
     merge: bool = typer.Option(True, "--merge/--replace", help="Merge with existing agents"),  # noqa: FBT001
 ):
-    """Import agents from tool integrations."""
+    """Import custom agents from development tool integrations.
+
+    This command discovers and imports agents you've created in tools like
+    Claude Code or Cursor IDE back into MyAI for management and syncing.
+
+    Import sources:
+    - Claude Code: ~/.claude/agents/ (custom .md files)
+    - Cursor IDE: .cursor/rules/ (custom .cursorrules files)
+    - VS Code: Extensions with agent definitions
+    - API tools: Custom integrations via webhooks
+
+    Imported agents:
+    - Are marked with their source (e.g., "my-agent (claude)")
+    - Persist across MyAI updates and reinstalls
+    - Can be enabled/disabled like default agents
+    - Are preserved during uninstall operations
+
+    Examples:
+      myai system integration-import -i claude    # Import from Claude Code
+      myai system integration-import -i cursor    # Import from Cursor IDE
+      myai system integration-import              # Import from all sources
+
+    Related commands:
+      myai agent list                             # See imported agents
+      myai agent show <name>                      # View imported agent details
+      myai system integration-list               # See available sources
+    """
     state: AppState = ctx.obj
 
     if state.is_debug():

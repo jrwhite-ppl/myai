@@ -568,6 +568,95 @@ Tool Integration Status
 └─────────┴───────────┴──────────────┴───────────┘
 ```
 
+## Claude SDK Integration
+
+### Overview
+MyAI provides deep integration with the Claude Code SDK, enabling enhanced agent creation, testing, and management capabilities.
+
+### SDK Features
+
+#### 1. Agent Creation with Claude SDK
+```python
+# From agent_cli.py
+@app.command()
+def create(
+    name: str,
+    interactive: bool = False,
+    use_claude_sdk: bool = True,  # Default to using SDK
+):
+    """Create a new agent with Claude SDK refinement."""
+    # Create basic agent
+    agent = manager.create_agent_basic(name, ...)
+
+    if use_claude_sdk and interactive:
+        # Launch Claude SDK for refinement
+        sdk = get_claude_sdk_integration()
+        result = asyncio.run(sdk.create_agent_with_sdk(agent, interactive=True))
+```
+
+#### 2. Agent Testing with SDK
+```bash
+# Test an agent with Claude SDK
+myai agent test lead_developer "Review this Python code for security issues"
+
+# The SDK will:
+# - Load the agent specification
+# - Configure Claude with the agent's system prompt
+# - Execute the test prompt
+# - Return results with cost and duration metrics
+```
+
+#### 3. SDK-Compatible Agent Format
+All agents are exported in Claude SDK-compatible markdown format:
+```markdown
+---
+name: lead_developer
+display_name: Lead Developer
+category: engineering
+tools: [Task, Bash, Read, Edit, Write]
+tags: [leadership, architecture, mentoring]
+---
+
+# Lead Developer
+
+## Role and Purpose
+...agent content...
+```
+
+### SDK Integration Module
+```python
+class ClaudeSDKIntegration:
+    """Integration with Claude Code SDK for agent management."""
+
+    async def create_agent_with_sdk(self, agent: AgentSpecification, interactive: bool = True):
+        """Create/refine agent using Claude SDK."""
+
+    async def test_agent(self, agent: AgentSpecification, test_prompt: str):
+        """Test agent with a specific prompt."""
+
+    def export_to_claude_format(self, agent: AgentSpecification) -> str:
+        """Export agent to Claude-compatible format."""
+
+    def validate_agent_for_sdk(self, agent: AgentSpecification) -> List[str]:
+        """Validate agent compatibility with Claude SDK."""
+```
+
+### MCP Tool Support
+The SDK integration automatically handles MCP (Model Context Protocol) tools:
+```python
+async def create_mcp_config(self, agent: AgentSpecification):
+    """Generate MCP configuration for agent tools."""
+    # Automatically configure MCP servers for tools like:
+    # - mcp__slack
+    # - mcp__github
+    # - mcp__datadog
+```
+
+### Requirements
+- Node.js 18+
+- Claude CLI: `npm install -g @anthropic-ai/claude-code`
+- Python SDK: `pip install claude-code-sdk` (installed with MyAI)
+
 ## Security Considerations
 
 ### 1. Secure Configuration Storage
