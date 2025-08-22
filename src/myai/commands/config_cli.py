@@ -15,8 +15,33 @@ from myai.cli.formatters import get_formatter
 from myai.cli.state import AppState
 from myai.config.manager import get_config_manager
 
-# Create config command group
-app = typer.Typer(help="📝 Configuration management commands")
+help_text = """📝 Configuration management - Control agents, IDE integrations, and system behavior
+
+MyAI uses hierarchical configuration: Enterprise → User → Team → Project
+
+Key areas:
+  • agents.*        - Enable/disable agents (project vs global scope)
+  • tools.*         - IDE integrations (Claude Code, Cursor, auto-sync)
+  • integrations.*  - Sync timing, conflict resolution
+  • settings.*      - Debug, backups, caching
+
+Essential commands:
+  myai config show                              # View current config
+  myai config get agents.enabled               # Check enabled agents
+  myai config set tools.claude.enabled false   # Disable Claude integration
+  myai config list-keys                        # See all available settings
+  myai config validate                          # Check for issues
+
+Config files: ~/.myai/config/user.json (personal), .myai/config/project.json (project)
+Changes auto-sync to IDE integrations (.claude/, .cursor/)"""
+
+app = typer.Typer(
+    help=help_text,
+    no_args_is_help=True,
+    add_completion=True,
+    rich_markup_mode="rich",
+    context_settings={"help_option_names": ["-h", "--help", "help"]},
+)
 console = Console()
 
 # Constants
@@ -32,7 +57,7 @@ def show(
     key: Optional[str] = typer.Option(None, "--key", "-k", help="Specific configuration key to show"),
     output_fmt: Optional[str] = typer.Option(None, "--format", "-f", help="Output format (vertical, json, table)"),
 ):
-    """Show current configuration."""
+    """SHOW commands/config_cli.py show TEST                      # See configuration status"""
     state: AppState = ctx.obj
 
     if state.is_debug():
@@ -77,13 +102,20 @@ def get(
 
     This command retrieves configuration values using dot notation.
 
+    Key configuration areas:
+      agents.*        - Agent enablement (enabled, disabled, global_enabled, auto_discover)
+      tools.*         - IDE integrations (claude.enabled, cursor.enabled, auto_sync)
+      integrations.*  - Sync behavior (auto_sync_interval, conflict_resolution)
+      settings.*      - System behavior (debug, backup_enabled, cache_enabled)
+
     Examples:
-      myai config get agents.enabled           # Get enabled agents list
-      myai config get integrations.claude      # Get Claude configuration
-      myai config get agents.global_enabled    # Get globally enabled agents
+      myai config get agents.enabled               # See enabled agents
+      myai config get tools.claude.enabled         # Check Claude integration
+      myai config get settings.debug               # Check debug mode
 
     Related commands:
-      myai config set <key> <value>    # Set configuration value
+      myai config set <key> <value>    # Change configuration value
+      myai config list-keys            # See all available keys with details
       myai config show                 # Show all configuration
     """
     state: AppState = ctx.obj
@@ -125,18 +157,29 @@ def set_value(
 ):
     """Set a configuration value.
 
-    This command sets configuration values using dot notation.
-    The value will be automatically parsed to the correct type.
+    This command sets configuration values using dot notation. Changes are
+    immediately applied and synced to your IDE integrations.
 
-    Examples:
-      myai config set agents.enabled "['python-expert','security-analyst']"  # Set list
-      myai config set integrations.claude.enabled true                       # Set boolean
-      myai config set user.name "John Doe"                                   # Set string
+    Common examples:
+      myai config set agents.enabled "['python-expert','security-analyst']"  # Enable agents
+      myai config set tools.claude.enabled true                             # Enable Claude
+      myai config set settings.debug true                                   # Enable debug mode
+      myai config set integrations.auto_sync_interval 600                   # Sync every 10 min
+
+    Configuration levels:
+      --level user     # Save to ~/.myai/config/user.json (default)
+      --level project  # Save to .myai/config/project.json
+      --level team     # Save to team config (shared)
+
+    After changes, validate with:
+      myai config validate         # Check configuration
+      myai agent list              # Verify agent status
+      myai status                  # Check system health
 
     Related commands:
-      myai config get <key>        # Get configuration value
+      myai config get <key>        # Get current value
+      myai config list-keys        # See all available keys with examples
       myai config show             # Show all configuration
-      myai config validate         # Validate configuration
     """
     state: AppState = ctx.obj
 
@@ -212,7 +255,7 @@ def validate(ctx: typer.Context):
         project_config_path = config_manager.get_config_path("project")
 
         # Create validation summary table
-        validation_table = Table(title="Validation Results", show_header=True, header_style="bold magenta")
+        validation_table = Table(title="Validation Results", show_header=True, header_style="bold magenta", expand=True)
         validation_table.add_column("Check", style="cyan", no_wrap=True)
         validation_table.add_column("Status", justify="center")
         validation_table.add_column("Details", style="dim")
@@ -271,12 +314,300 @@ def validate(ctx: typer.Context):
 
 
 @app.command()
+def list_keys(ctx: typer.Context):
+    """List all available configuration keys with descriptions.
+
+    This command shows all configuration keys that can be set, along with
+    their purpose, expected values, and impact on system behavior.
+
+    Use this command to discover configuration options and understand
+    what each setting controls.
+
+    Examples:
+      myai config list-keys                   # Show all available keys
+      myai config list-keys | grep agent     # Find agent-related settings
+
+    Related commands:
+      myai config get <key>                   # Get current value of a key
+      myai config set <key> <value>          # Set a configuration value
+      myai config show                        # Show current configuration
+    """
+    state: AppState = ctx.obj
+
+    # Configuration key definitions with descriptions
+    config_keys = {
+        "Agent Management": {
+            "agents.enabled": {
+                "type": "list[str]",
+                "default": "[]",
+                "description": "Agents active in the current project",
+                "impact": "Creates .claude/agents/ and .cursor/rules/ files for enabled agents",
+                "validation": "Check files exist, agents appear in IDE, 'myai agent list' shows enabled",
+            },
+            "agents.disabled": {
+                "type": "list[str]",
+                "default": "[]",
+                "description": "Agents explicitly disabled for this project",
+                "impact": "Prevents agents from being activated even if globally enabled",
+                "validation": "Disabled agents don't appear in IDE, files are removed",
+            },
+            "agents.global_enabled": {
+                "type": "list[str]",
+                "default": "[]",
+                "description": "Agents active across all projects",
+                "impact": "Creates ~/.claude/agents/ files, available in all projects",
+                "validation": "Check global files exist, agents available in new projects",
+            },
+            "agents.global_disabled": {
+                "type": "list[str]",
+                "default": "[]",
+                "description": "Agents disabled globally across all projects",
+                "impact": "Prevents agents from being used anywhere",
+                "validation": "Agents don't appear in any project, global files removed",
+            },
+            "agents.auto_discover": {
+                "type": "bool",
+                "default": "true",
+                "description": "Automatically detect and load new agents",
+                "impact": "New agents in ~/.myai/agents/ are automatically available",
+                "validation": "Add agent file, check if it appears in 'myai agent list'",
+            },
+            "agents.categories": {
+                "type": "list[str]",
+                "default": "[]",
+                "description": "Agent categories to load (empty = all)",
+                "impact": "Filters which agent categories are available",
+                "validation": "Only specified categories appear in agent listings",
+            },
+            "agents.custom_path": {
+                "type": "path",
+                "default": "null",
+                "description": "Custom directory for user-created agents",
+                "impact": "Changes where MyAI looks for custom agents",
+                "validation": "Agents in custom path appear in 'myai agent list'",
+            },
+        },
+        "IDE Tool Integration": {
+            "tools.claude.enabled": {
+                "type": "bool",
+                "default": "true",
+                "description": "Enable Claude Code integration",
+                "impact": "Controls whether agents sync to ~/.claude/agents/ and project .claude/",
+                "validation": "Agent files appear in Claude directories, Claude Code sees agents",
+            },
+            "tools.claude.auto_sync": {
+                "type": "bool",
+                "default": "true",
+                "description": "Automatically sync agents to Claude when enabled/disabled",
+                "impact": "Agent files are created/removed immediately on status change",
+                "validation": "Enable/disable agent, check files sync immediately",
+            },
+            "tools.claude.agents_path": {
+                "type": "path",
+                "default": "~/.claude/agents",
+                "description": "Directory where Claude agent files are stored",
+                "impact": "Changes where Claude integration files are created",
+                "validation": "Agent files appear in specified directory",
+            },
+            "tools.claude.settings_path": {
+                "type": "path",
+                "default": "~/.claude/settings.json",
+                "description": "Path to Claude configuration file",
+                "impact": "Controls Claude integration settings location",
+                "validation": "Settings file exists and is valid JSON",
+            },
+            "tools.cursor.enabled": {
+                "type": "bool",
+                "default": "true",
+                "description": "Enable Cursor IDE integration",
+                "impact": "Controls whether agents sync to .cursor/rules/",
+                "validation": "Agent files appear in Cursor directory, Cursor sees rules",
+            },
+            "tools.cursor.auto_sync": {
+                "type": "bool",
+                "default": "true",
+                "description": "Automatically sync agents to Cursor when enabled/disabled",
+                "impact": "Cursor rule files are created/removed immediately",
+                "validation": "Enable/disable agent, check .cursor/rules/ files sync",
+            },
+            "tools.cursor.rules_path": {
+                "type": "path",
+                "default": ".cursor/rules",
+                "description": "Directory where Cursor rule files are stored",
+                "impact": "Changes where Cursor integration files are created",
+                "validation": "Rule files appear in specified directory",
+            },
+            "tools.cursor.project_specific": {
+                "type": "bool",
+                "default": "true",
+                "description": "Create project-specific Cursor rules only",
+                "impact": "Rules are per-project rather than global",
+                "validation": "Rules only appear in current project's .cursor/",
+            },
+        },
+        "Sync & Integration Behavior": {
+            "integrations.auto_sync_interval": {
+                "type": "int",
+                "default": "300",
+                "description": "How often to sync changes (seconds, 60-3600)",
+                "impact": "Controls frequency of automatic synchronization",
+                "validation": "Watch sync timestamps, enable debug to see sync activity",
+            },
+            "integrations.conflict_resolution": {
+                "type": "str",
+                "default": "interactive",
+                "description": "How to handle sync conflicts (interactive/auto/manual/abort)",
+                "impact": "Determines behavior when local and remote changes conflict",
+                "validation": "Create conflict scenario, observe resolution behavior",
+            },
+            "integrations.sync_on_change": {
+                "type": "bool",
+                "default": "true",
+                "description": "Sync immediately when agents are enabled/disabled",
+                "impact": "Files update instantly vs waiting for sync interval",
+                "validation": "Enable agent, check if files appear immediately",
+            },
+            "integrations.dry_run_default": {
+                "type": "bool",
+                "default": "false",
+                "description": "Default to dry-run mode for sync operations",
+                "impact": "Shows what would sync without making changes",
+                "validation": "Sync operations show preview without actual changes",
+            },
+        },
+        "System Settings": {
+            "settings.debug": {
+                "type": "bool",
+                "default": "false",
+                "description": "Enable detailed debug output",
+                "impact": "Shows detailed operation logs, sync activity, file operations",
+                "validation": "Commands show additional [dim] debug messages",
+            },
+            "settings.auto_sync": {
+                "type": "bool",
+                "default": "true",
+                "description": "Global toggle for all automatic synchronization",
+                "impact": "Master switch that disables all auto-sync when false",
+                "validation": "Disable, check that no automatic syncing occurs",
+            },
+            "settings.backup_enabled": {
+                "type": "bool",
+                "default": "true",
+                "description": "Create backups before making configuration changes",
+                "impact": "Backup files created in ~/.myai/backups/ before modifications",
+                "validation": "Make changes, check for timestamped backup files",
+            },
+            "settings.backup_count": {
+                "type": "int",
+                "default": "5",
+                "description": "Maximum number of backup files to retain (1-50)",
+                "impact": "Oldest backups are deleted when limit is exceeded",
+                "validation": "Check backup directory, verify count limit enforcement",
+            },
+            "settings.cache_enabled": {
+                "type": "bool",
+                "default": "true",
+                "description": "Enable configuration caching for performance",
+                "impact": "Faster config loading, may delay seeing external changes",
+                "validation": "Disable, check if config loading is slower but more current",
+            },
+            "settings.cache_ttl": {
+                "type": "int",
+                "default": "3600",
+                "description": "Configuration cache lifetime in seconds (60-86400)",
+                "impact": "How long cached configuration data remains valid",
+                "validation": "Change external config, check when MyAI sees changes",
+            },
+            "settings.merge_strategy": {
+                "type": "str",
+                "default": "merge",
+                "description": "How to combine configurations from different levels (merge/nuclear)",
+                "impact": "Controls whether configs are deeply merged or completely overridden",
+                "validation": "Set conflicting values at different levels, check resolution",
+            },
+        },
+    }
+
+    try:
+        if state.output_format == "json":
+            formatter = get_formatter("json", console)
+            formatter.format(config_keys)
+        else:
+            console.print("[bold]📋 Available Configuration Keys[/bold]\n")
+
+            for category, keys in config_keys.items():
+                console.print(f"[bold cyan]{category}:[/bold cyan]")
+
+                # Create table for this category
+                table = Table(show_header=True, header_style="bold magenta", expand=True, show_lines=True)
+                table.add_column("Key", style="cyan", no_wrap=True, width=25)
+                table.add_column("Type", style="green", width=12)
+                table.add_column("Default", style="yellow", width=15)
+                table.add_column("Description & Impact", style="white", min_width=40)
+
+                for key, info in keys.items():
+                    # Format description with impact
+                    description_text = info["description"]
+                    impact_text = f"\n[dim]Impact:[/dim] {info['impact']}"
+                    validation_text = f"\n[dim]Validate:[/dim] {info['validation']}"
+                    full_description = description_text + impact_text + validation_text
+
+                    table.add_row(key, info["type"], info["default"], full_description)
+
+                console.print(table)
+                console.print()
+
+            console.print("[bold]Next Steps:[/bold]")
+            console.print("  • Get current value: [cyan]myai config get <key>[/cyan]")
+            console.print("  • Set a value: [cyan]myai config set <key> <value>[/cyan]")
+            console.print("  • View all config: [cyan]myai config show[/cyan]")
+            console.print("  • Validate setup: [cyan]myai config validate[/cyan]")
+
+    except Exception as e:
+        console.print(f"[red]Error listing configuration keys: {e}[/red]")
+        if state.is_debug():
+            raise
+
+
+@app.command()
 def reset(
     ctx: typer.Context,
     level: str = typer.Option("user", "--level", "-l", help="Configuration level to reset"),
     confirm: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),  # noqa: FBT001
 ):
-    """Reset configuration to defaults."""
+    """Reset configuration to defaults.
+
+    This command resets a configuration level to its default values,
+    removing all customizations. Use with caution as this cannot be undone
+    (unless you have backups enabled).
+
+    What gets reset:
+      • All agent enablement settings
+      • Tool integration configurations
+      • Sync and integration behavior settings
+      • System preferences and customizations
+
+    Examples:
+      myai config reset --level user          # Reset user preferences
+      myai config reset --level project       # Reset project settings
+      myai config reset --level user --yes    # Skip confirmation
+
+    After reset, you may need to:
+      • Re-enable your preferred agents
+      • Reconfigure tool integrations
+      • Adjust sync preferences
+      • Check that IDE integrations still work
+
+    To validate the reset worked:
+      myai config show                        # Verify default values
+      myai agent list                         # Check agent status
+      myai status                             # Ensure system health
+
+    Related commands:
+      myai config show                        # See current configuration
+      myai config validate                    # Check configuration validity
+      myai install all                        # Reinstall with defaults
+    """
     state: AppState = ctx.obj
 
     if not confirm:
@@ -307,7 +638,46 @@ def diff(
     key: Optional[str] = typer.Option(None, "--key", "-k", help="Specific configuration key to compare"),
     show_identical: bool = typer.Option(False, "--show-identical", help="Show identical values"),  # noqa: FBT001
 ):
-    """Compare configurations between different levels."""
+    """Compare configurations between different levels.
+
+    This command shows differences between configuration levels, helping you
+    understand how settings override each other and troubleshoot conflicts.
+
+    Configuration hierarchy (highest to lowest priority):
+      1. Enterprise - Organization policies (readonly)
+      2. User - Your personal settings
+      3. Team - Shared team settings
+      4. Project - Project-specific settings
+
+    Examples:
+      myai config diff user project           # Compare user vs project settings
+      myai config diff default user           # See what you've customized
+      myai config diff user project --key agents  # Compare just agent settings
+      myai config diff user project --show-identical  # Show matching values too
+
+    Common use cases:
+      • Troubleshooting: Why is an agent not working?
+      • Auditing: What settings have been customized?
+      • Team sync: Ensuring consistent team configuration
+      • Migration: Understanding differences before changes
+
+    Understanding the output:
+      ≠ Different  - Values differ between levels
+      + Added      - Setting exists in target but not source
+      - Removed    - Setting exists in source but not target
+      = Same       - Values are identical (only with --show-identical)
+
+    To validate configuration precedence:
+      1. Check what's active: myai config show
+      2. Compare levels: myai config diff user project
+      3. Understand which takes priority
+      4. Test behavior: myai agent list, myai status
+
+    Related commands:
+      myai config show                        # See effective configuration
+      myai config get <key>                   # Get specific setting
+      myai config validate                    # Check configuration validity
+    """
     state: AppState = ctx.obj
 
     if state.is_debug():
@@ -359,7 +729,10 @@ def diff(
 
         # Display differences
         table = Table(
-            title=f"Configuration Comparison: {source} vs {target}", show_header=True, header_style="bold magenta"
+            title=f"Configuration Comparison: {source} vs {target}",
+            show_header=True,
+            header_style="bold magenta",
+            expand=True,
         )
         table.add_column("Key", style="cyan", no_wrap=True)
         table.add_column(f"{source.capitalize()}", style="yellow")

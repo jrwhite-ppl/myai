@@ -45,7 +45,7 @@ class TableFormatter(OutputFormatter):
             data = [data]
 
         # Create table
-        table = Table(title=title, show_header=True, header_style="bold magenta")
+        table = Table(title=title, show_header=True, header_style="bold magenta", expand=True)
 
         # Determine columns
         if not columns and data:

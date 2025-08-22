@@ -20,12 +20,39 @@ from myai.cli.state import AppState
 from myai.commands import agent_cli, config_cli, install_cli, system_cli, uninstall_cli, wizard_cli
 
 # Create the main Typer application
+help_text = """🤖 MyAI - AI Agent and Configuration Management CLI
+
+Comprehensive AI agent management system for developers and teams. Manage specialized AI agents,
+configure IDE integrations, and streamline your AI-assisted development workflows.
+
+Core capabilities:
+  • 20+ pre-built expert agents (Python, Security, DevOps, Business Analysis, etc.)
+  • Seamless Claude Code and Cursor IDE integrations
+  • Custom agent creation with templates and Claude SDK refinement
+  • Hierarchical configuration management (Enterprise → User → Team → Project)
+  • Agent testing and refinement with interactive Claude SDK workflows
+  • Automated sync to IDE tools (.claude/, .cursor/)
+
+Quick start:
+  myai install all              # Complete setup with all integrations
+  myai agent list               # See available agents
+  myai agent enable python-expert --global    # Enable agent globally
+  myai status                   # Check system health
+  myai agent create my-expert --interactive   # Create custom agent with Claude
+
+Essential workflows:
+  • Setup: install → configure → enable agents → integrate with IDEs
+  • Daily use: test agents → refine with Claude SDK → deploy to projects
+  • Team management: shared configs → agent libraries → synchronized workflows
+
+Perfect for developers, teams, and organizations using AI-assisted development."""
+
 app = typer.Typer(
     name="myai",
-    help="🤖 MyAI - AI Agent and Configuration Management CLI",
-    add_completion=False,
-    rich_markup_mode="rich",
+    help=help_text,
     no_args_is_help=True,
+    add_completion=True,
+    rich_markup_mode="rich",
     context_settings={"help_option_names": ["-h", "--help", "help"]},
 )
 
@@ -43,9 +70,7 @@ def main_callback(
     output: str = typer.Option("table", "--output", "-o", help="Output format (table, json)"),
 ):
     """
-    🤖 MyAI - AI Agent and Configuration Management CLI
-
-    Manage your AI agents, configurations, and tool integrations from one place.
+    🤖 MyAI - app.py main_callback
     """
     # Update global state
     state.debug = debug
@@ -158,7 +183,7 @@ def status(ctx: typer.Context):
             console.print("[bold cyan]🔍 MyAI System Status[/bold cyan]\n")
 
             # System info table
-            system_table = Table(title="System Information", show_header=False)
+            system_table = Table(title="System Information", show_header=False, expand=True)
             system_table.add_column("Property", style="cyan")
             system_table.add_column("Value", style="white")
 
@@ -171,7 +196,7 @@ def status(ctx: typer.Context):
             console.print()
 
             # Agent statistics table
-            agent_table = Table(title="Agent Statistics", show_header=False)
+            agent_table = Table(title="Agent Statistics", show_header=False, expand=True)
             agent_table.add_column("Metric", style="cyan")
             agent_table.add_column("Count", style="white")
 
@@ -186,7 +211,9 @@ def status(ctx: typer.Context):
             console.print()
 
             # Configuration & Integration status
-            status_table = Table(title="Configuration & Integrations", show_header=True, header_style="bold magenta")
+            status_table = Table(
+                title="Configuration & Integrations", show_header=True, header_style="bold magenta", expand=True
+            )
             status_table.add_column("Component", style="cyan", no_wrap=True)
             status_table.add_column("Status", justify="center")
             status_table.add_column("Details", style="dim")
@@ -268,12 +295,12 @@ def status(ctx: typer.Context):
 def create_app():
     """Create and configure the main application."""
     # Add command groups
-    app.add_typer(install_cli.app, name="install", help="📦 Installation and configuration commands")
-    app.add_typer(uninstall_cli.app, name="uninstall", help="🗑️ Uninstall MyAI components")
-    app.add_typer(config_cli.app, name="config", help="📝 Configuration management commands")
+    app.add_typer(install_cli.app, name="install")
+    app.add_typer(uninstall_cli.app, name="uninstall")
+    app.add_typer(config_cli.app, name="config")
     app.add_typer(agent_cli.app, name="agent")
-    app.add_typer(system_cli.app, name="system", help="🔧 System utilities, integrations, and diagnostics")
-    app.add_typer(wizard_cli.app, name="wizard", help="🧙 Interactive wizards and guided workflows")
+    app.add_typer(system_cli.app, name="system")
+    app.add_typer(wizard_cli.app, name="wizard")
     return app
 
 

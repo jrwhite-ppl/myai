@@ -26,8 +26,45 @@ from myai.cli.state import AppState
 from myai.config.manager import get_config_manager
 from myai.integrations import IntegrationManager
 
-# Create system command group
-app = typer.Typer(help="🔧 System utilities, integrations, and diagnostics")
+help_text = """🔧 System utilities, diagnostics, and integration management
+
+Comprehensive system administration tools for maintaining, monitoring, and troubleshooting
+your MyAI installation and integrations.
+
+System diagnostics:
+  • Health checks     - Verify system components and dependencies
+  • Integration status - Check Claude Code, Cursor, and other tool connections
+  • Configuration validation - Ensure all settings are correct
+  • Performance monitoring - System resource usage and performance
+
+Integration management:
+  • Discovery    - Find available IDE integrations and tools
+  • Health check - Test integration connectivity and functionality
+  • Import/Export - Backup and restore integration configurations
+  • Sync status  - Monitor automatic synchronization processes
+
+Maintenance tools:
+  • Cache management - Clear and rebuild system caches
+  • Backup/restore - System state and configuration backups
+  • Log analysis - Review system logs and error reports
+  • Cleanup - Remove temporary files and outdated data
+
+Essential commands:
+  myai system doctor                         # Complete system health check
+  myai system integration-health             # Check all integrations
+  myai system integration-list               # See available integrations
+  myai system integration-import             # Import custom agents from tools
+
+Troubleshooting:
+  Use these commands to diagnose issues, verify installations, and maintain system health."""
+
+app = typer.Typer(
+    help=help_text,
+    no_args_is_help=True,
+    add_completion=True,
+    rich_markup_mode="rich",
+    context_settings={"help_option_names": ["-h", "--help", "help"]},
+)
 console = Console()
 
 
@@ -93,7 +130,7 @@ def doctor(ctx: typer.Context):
             checks.append(("Configuration", "❌", f"Error: {e}"))
 
         # Display results
-        table = Table(title="🩺 System Health Check", show_header=True, header_style="bold magenta")
+        table = Table(title="🩺 System Health Check", show_header=True, header_style="bold magenta", expand=True)
         table.add_column("Component", style="cyan")
         table.add_column("Status", style="white", no_wrap=True)
         table.add_column("Details", style="dim")
@@ -649,7 +686,7 @@ def list_integrations(
                 return
 
             # Create table
-            table = Table(title="🔗 Available Integrations", show_header=True, header_style="bold magenta")
+            table = Table(title="🔗 Available Integrations", show_header=True, header_style="bold magenta", expand=True)
             table.add_column("Name", style="cyan", no_wrap=True)
             table.add_column("Display Name", style="white")
             table.add_column("Status", style="green")
@@ -692,7 +729,7 @@ def list_integrations(
             status_info = run_async(manager.get_adapter_status())
 
             # Create status table
-            table = Table(title="📊 Integration Status", show_header=True, header_style="bold magenta")
+            table = Table(title="📊 Integration Status", show_header=True, header_style="bold magenta", expand=True)
             table.add_column("Name", style="cyan", no_wrap=True)
             table.add_column("Status", style="white")
             table.add_column("Tool", style="green")

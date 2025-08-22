@@ -21,8 +21,45 @@ from myai.cli.state import AppState
 from myai.config.manager import get_config_manager
 from myai.models.agent import AgentCategory
 
-# Create wizard command group
-app = typer.Typer(help="🧙 Interactive wizards and guided workflows")
+help_text = """🧙 Interactive wizards and guided workflows - Step-by-step setup and configuration
+
+Interactive guides that walk you through complex MyAI setup and configuration tasks with
+prompts, explanations, and validation at each step.
+
+Available wizards:
+  • Installation  - Complete MyAI setup with guided choices
+  • Agent setup   - Select and configure agents for your project
+  • Integration   - Connect MyAI with your preferred IDEs and tools
+  • Troubleshoot  - Diagnose and fix common configuration issues
+
+Wizard features:
+  • Interactive prompts with clear explanations
+  • Real-time validation and feedback
+  • Rollback capability if something goes wrong
+  • Customized recommendations based on your environment
+  • Progress tracking and step-by-step guidance
+
+Perfect for:
+  • First-time MyAI users
+  • Complex multi-step configurations
+  • Learning MyAI features and capabilities
+  • Troubleshooting when automated commands fail
+
+Essential wizards:
+  myai wizard install                         # Complete installation guide
+  myai wizard agent-setup                     # Configure agents interactively
+  myai wizard integration-setup               # Connect IDE tools step-by-step
+
+Benefits:
+  Wizards provide educational context and ensure proper configuration without memorizing commands."""
+
+app = typer.Typer(
+    help=help_text,
+    no_args_is_help=True,
+    add_completion=True,
+    rich_markup_mode="rich",
+    context_settings={"help_option_names": ["-h", "--help", "help"]},
+)
 console = Console()
 
 

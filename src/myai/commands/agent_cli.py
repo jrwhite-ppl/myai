@@ -49,39 +49,43 @@ def _resolve_agent_name(registry, name_or_display: str) -> Optional[str]:
     return resolved_name
 
 
-# Create agent command group
-app = typer.Typer(help="""🤖 Agent management commands
+help_text = """🤖 Agent management - Create, configure, and deploy AI agents for your projects
 
-Common workflows:
+Manage a library of AI agents with specialized expertise in different domains like engineering,
+security, business analysis, and more. Agents integrate seamlessly with Claude Code and Cursor.
 
-1. Create a new agent:
-   myai agent create my-expert --category engineering --interactive
+Agent types:
+  • Default agents  - 20+ pre-built specialists (python-expert, security-analyst, etc.)
+  • Custom agents   - Your own agents created from scratch or templates
+  • Imported agents - Agents imported from Claude Code or Cursor
 
-2. List all available agents:
-   myai agent list
-   myai agent list --category custom  # Show only custom agents
+Management scopes:
+  • Global    - Available across all projects (~/.claude/agents/)
+  • Project   - Active only in current project (.claude/, .cursor/)
 
-3. Enable an agent for your project:
-   myai agent enable my-expert
+Essential workflows:
+  myai agent list                                    # See all available agents
+  myai agent enable python-expert                   # Enable for current project
+  myai agent enable devops-engineer --global        # Enable globally
+  myai agent create my-expert --interactive         # Create custom agent with Claude
+  myai agent test python-expert "How to optimize performance?"  # Test with Claude SDK
+  myai agent show python-expert                     # View agent details
+  myai agent edit my-expert                          # Edit custom agent
 
-4. Test an agent with Claude SDK:
-   myai agent test my-expert "Explain how to implement error handling"
+Integration features:
+  • Auto-sync to Claude Code (.claude/agents/)
+  • Auto-sync to Cursor IDE (.cursor/rules/)
+  • Template-based agent creation
+  • Claude SDK testing and refinement
+  • Version control and backup"""
 
-5. Show agent details:
-   myai agent show my-expert
-
-6. Disable an agent:
-   myai agent disable my-expert
-
-Tips:
-- Use --interactive flag when creating agents to refine them with Claude
-- Enabled agents are automatically synced to Claude Code and Cursor
-- Custom agents persist across MyAI updates
-- Use 'myai agent enable <name>' to enable an agent
-- Use 'myai agent disable <name>' to disable an agent
-- Use 'myai agent edit <name>' to edit an agent
-- Use 'myai agent delete <name>' to delete an agent
-""")
+app = typer.Typer(
+    help=help_text,
+    no_args_is_help=True,
+    add_completion=True,
+    rich_markup_mode="rich",
+    context_settings={"help_option_names": ["-h", "--help", "help"]},
+)
 
 
 def _create_agent_files(agent, *, global_scope=False):
@@ -1261,7 +1265,7 @@ def diff(
         # Compare metadata
         console.print(f"[bold]Comparing {name1} vs {name2}[/bold]")
 
-        table = Table(title="Agent Differences", show_header=True, header_style="bold magenta")
+        table = Table(title="Agent Differences", show_header=True, header_style="bold magenta", expand=True)
         table.add_column("Field", style="cyan")
         table.add_column(name1, style="green")
         table.add_column(name2, style="yellow")
@@ -1339,13 +1343,12 @@ def list_agents(ctx: typer.Context):
             title="📊 Overview",
             border_style="bright_blue",
             box=box.DOUBLE,
-            expand=False,
         )
         console.print(overview_panel)
         console.print()
 
         # Create status table
-        table = Table(show_header=True, header_style="bold magenta", box=box.HEAVY)
+        table = Table(show_header=True, header_style="bold magenta", box=box.HEAVY, expand=True)
         table.add_column("Agent", style="cyan", no_wrap=True)
         table.add_column("Status", justify="center")
         table.add_column("Scope", justify="center")
@@ -1446,7 +1449,7 @@ def templates(ctx: typer.Context):
             formatter.format(template_data)
         else:
             # Create table
-            table = Table(title="📋 Available Templates", show_header=True, header_style="bold magenta")
+            table = Table(title="📋 Available Templates", show_header=True, header_style="bold magenta", expand=True)
             table.add_column("Name", style="cyan", no_wrap=True)
             table.add_column("Display Name", style="white")
             table.add_column("Category", style="green")

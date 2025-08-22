@@ -19,8 +19,15 @@ from rich.text import Text
 from myai.cli.state import AppState
 from myai.integrations import IntegrationManager
 
-# Create integration command group
-app = typer.Typer(help="🔗 Tool integration management commands")
+help_text = "🔗 Tool integration management commands"
+
+app = typer.Typer(
+    help=help_text,
+    no_args_is_help=True,
+    add_completion=True,
+    rich_markup_mode="rich",
+    context_settings={"help_option_names": ["-h", "--help", "help"]},
+)
 console = Console()
 
 
@@ -58,7 +65,7 @@ def list_integrations(
                 return
 
             # Create table
-            table = Table(title="🔗 Available Integrations", show_header=True, header_style="bold magenta")
+            table = Table(title="🔗 Available Integrations", show_header=True, header_style="bold magenta", expand=True)
             table.add_column("Name", style="cyan", no_wrap=True)
             table.add_column("Display Name", style="white")
             table.add_column("Status", style="green")
@@ -97,7 +104,7 @@ def list_integrations(
             status_info = run_async(manager.get_adapter_status())
 
             # Create status table
-            table = Table(title="📊 Integration Status", show_header=True, header_style="bold magenta")
+            table = Table(title="📊 Integration Status", show_header=True, header_style="bold magenta", expand=True)
             table.add_column("Name", style="cyan", no_wrap=True)
             table.add_column("Status", style="white")
             table.add_column("Tool", style="green")

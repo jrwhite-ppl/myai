@@ -8,7 +8,44 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
-app = typer.Typer()
+help_text = """🗑️ Uninstall MyAI components - Remove files, configurations, and integrations
+
+Safely remove MyAI installations while preserving important data and offering recovery options.
+
+Uninstall options:
+  • Complete removal  - All MyAI files and configurations
+  • Selective removal - Choose specific components to remove
+  • Backup creation  - Automatic backup before removal
+  • Custom preservation - Keep custom agents and important data
+
+What gets removed:
+  • ~/.myai/          - User data and configurations
+  • ~/.claude/agents/ - Global Claude Code integration
+  • .claude/          - Project Claude configurations
+  • .cursor/          - Project Cursor rules and settings
+  • System packages   - MyAI CLI and dependencies
+
+Data protection:
+  • Custom agents are preserved by default
+  • Configuration backups created automatically
+  • Option to keep specific directories
+  • Recovery instructions provided
+
+Essential commands:
+  myai uninstall                          # Interactive uninstall with options
+  myai uninstall --all                    # Complete removal
+  myai uninstall --preserve-custom        # Keep custom agents
+  myai uninstall --backup-first           # Create backup before removal
+
+Safety features:
+  Always creates recovery information and offers selective preservation of your custom work."""
+
+app = typer.Typer(
+    help=help_text,
+    add_completion=True,
+    rich_markup_mode="rich",
+    context_settings={"help_option_names": ["-h", "--help", "help"]},
+)
 console = Console()
 
 

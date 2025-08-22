@@ -19,13 +19,13 @@ class TestInstallCLI(unittest.TestCase):
         """Test that setup CLI shows help when no command is provided."""
         result = self.runner.invoke(self.app, [])
         self.assertEqual(result.exit_code, 0)
-        self.assertIn("Interact with MyAI with this command", result.stdout)
+        self.assertIn("📦 Installation and setup commands - Get MyAI configured and ready to use", result.stdout)
 
     def test_install_cli_help_flag(self):
         """Test that setup CLI shows help with --help flag."""
         result = self.runner.invoke(self.app, ["--help"])
         self.assertEqual(result.exit_code, 0)
-        self.assertIn("Interact with MyAI with this command", result.stdout)
+        self.assertIn("📦 Installation and setup commands - Get MyAI configured and ready to use", result.stdout)
 
     def test_install_all_command(self):
         """Test the setup all command."""
@@ -149,8 +149,9 @@ class TestInstallCLICallback(unittest.TestCase):
 
         callback(mock_ctx)
 
-        # Verify that ctx.invoke was called with help
-        mock_ctx.invoke.assert_called_once_with(app, ["--help"])
+        # Verify that ctx.get_help() and ctx.exit() were called
+        mock_ctx.get_help.assert_called_once()
+        mock_ctx.exit.assert_called_once()
 
     def test_callback_with_subcommand(self):
         """Test callback when a subcommand is provided."""

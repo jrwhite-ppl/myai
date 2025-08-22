@@ -22,7 +22,41 @@ from myai.config.manager import get_config_manager
 from myai.integrations.manager import IntegrationManager
 from myai.models.config import MyAIConfig
 
-app = typer.Typer()
+help_text = """📦 Installation and setup commands - Get MyAI configured and ready to use
+
+Sets up MyAI with complete installation and configuration for all supported IDEs and tools.
+
+Installation types:
+  • all        - Complete setup (agents, IDE integrations, configurations)
+  • agents     - Default agent library installation
+  • project    - Project-specific setup (.claude/, .cursor/, config)
+  • agentos    - Agent-OS workflow system integration
+
+Key features:
+  • Automatic IDE integration (Claude Code, Cursor)
+  • Agent library with 20+ pre-built agents
+  • Hierarchical configuration system
+  • Backup and restore capabilities
+  • Cross-platform compatibility
+
+Essential commands:
+  myai install all                    # Complete setup (recommended for new users)
+  myai install project               # Setup current project only
+  myai install agents                # Install default agent library
+  myai install agentos --project     # Add Agent-OS workflows
+
+After installation:
+  ~/.myai/               # User data and configurations
+  ~/.claude/agents/      # Global Claude Code agents
+  .claude/               # Project Claude configuration
+  .cursor/               # Project Cursor rules"""
+
+app = typer.Typer(
+    help=help_text,
+    add_completion=True,
+    rich_markup_mode="rich",
+    context_settings={"help_option_names": ["-h", "--help", "help"]},
+)
 console = Console()
 
 # Constants for Agent-OS style minimal wrappers
@@ -222,7 +256,8 @@ def callback(ctx: typer.Context):
     # Check if the callback was triggered by the primary app.
     if ctx.invoked_subcommand is None:
         # If no subcommand was invoked, execute the app's --help menu.
-        ctx.invoke(app, ["--help"])
+        print(ctx.get_help())
+        ctx.exit()
 
 
 # Subcommand docstrings are used for help messages
@@ -612,7 +647,7 @@ alwaysApply: false
     console.print("\n[bold green]✨ MyAI setup complete![/bold green]")
 
     # Create summary table
-    summary_table = Table(title="Installation Summary", show_header=True, header_style="bold cyan")
+    summary_table = Table(title="Installation Summary", show_header=True, header_style="bold cyan", expand=True)
     summary_table.add_column("Component", style="cyan", no_wrap=True)
     summary_table.add_column("Location", style="white")
     summary_table.add_column("Purpose", style="dim")
