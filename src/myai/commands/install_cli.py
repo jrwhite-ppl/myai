@@ -554,22 +554,13 @@ source: "~/.myai/agents"
     claude_project_config = {
         "projects": {
             str(cwd): {
-                "name": cwd.name,
-                "description": f"MyAI-managed project: {cwd.name}",
-                "tools": [
-                    "Task",
-                    "Bash",
-                    "Read",
-                    "Edit",
-                    "Write",
-                    "NotebookRead",
-                    "NotebookEdit",
-                    "WebFetch",
-                    "TodoWrite",
-                    "WebSearch",
-                ],
+                "model": "claude-3-sonnet-20241022",
+                "permissions": {
+                    "allow": ["Bash(uv run:*)", "Bash(npm run:*)", "Bash(yarn:*)", "Bash(make:*)", "Bash(git:*)"],
+                    "deny": ["Read(./.env)", "Read(./.env.*)", "Read(./secrets/**)"],
+                },
+                "env": {"MYAI_PROJECT": "true"},
                 "agentsPath": str(project_claude_agents),
-                "settings": {"model": "claude-3-sonnet-20241022", "temperature": 0.7},
             }
         }
     }
@@ -741,22 +732,12 @@ def project(
     claude_project_config = {
         "projects": {
             str(cwd): {
-                "name": cwd.name,
-                "description": f"MyAI-managed project: {cwd.name}",
-                "tools": [
-                    "Task",
-                    "Bash",
-                    "Read",
-                    "Edit",
-                    "Write",
-                    "NotebookRead",
-                    "NotebookEdit",
-                    "WebFetch",
-                    "TodoWrite",
-                    "WebSearch",
-                ],
+                "model": "claude-3-sonnet-20241022",
+                "permissions": {
+                    "allow": ["Bash(uv run:*)", "Bash(npm run:*)", "Bash(yarn:*)", "Bash(make:*)", "Bash(git:*)"],
+                    "deny": ["Read(./.env)", "Read(./.env.*)", "Read(./secrets/**)"],
+                },
                 "agentsPath": str(claude_agents_dir),
-                "settings": {"model": "claude-3-sonnet-20241022", "temperature": 0.7},
             }
         }
     }

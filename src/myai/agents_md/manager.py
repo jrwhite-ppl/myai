@@ -15,6 +15,7 @@ from myai.agent.registry import get_agent_registry
 from myai.agents_md.templates import TEMPLATES
 from myai.config.manager import get_config_manager
 from myai.models.agents_md import AgentsMdEntry, AgentsMdRegistry
+from myai.models.path import PathConfig
 
 console = Console()
 
@@ -25,8 +26,15 @@ class AgentsMdManager:
     def __init__(self, project_root: Optional[Path] = None):
         """Initialize the manager."""
         self.project_root = project_root or Path.cwd()
-        self.registry_path = self.project_root / ".myai" / "agents-md-registry.json"
+        # Use global config directory instead of project-level .myai
+        paths = PathConfig()
+        self.registry_path = paths.config_dir / "agents-md-registry.json"
         self.registry = self._load_registry()
+        self.project_registry = self.registry.get_project_registry(self.project_root)
+
+        # Save registry if it was migrated
+        if (self.project_root / ".myai" / "agents-md-registry.json").exists():
+            self._save_registry()
 
     def _load_registry(self) -> AgentsMdRegistry:
         """Load the registry from disk."""
@@ -38,8 +46,55 @@ class AgentsMdManager:
             except Exception as e:
                 console.print(f"[yellow]Warning: Could not load registry: {e}[/yellow]")
 
+        # Try to migrate from old project-level registry
+        old_registry_path = self.project_root / ".myai" / "agents-md-registry.json"
+        if old_registry_path.exists():
+            registry = self._migrate_old_registry(old_registry_path)
+            # Save will be called later after registry is assigned
+            return registry
+
         # Create new registry
-        return AgentsMdRegistry(project_root=self.project_root)
+        return AgentsMdRegistry()
+
+    def _migrate_old_registry(self, old_path: Path) -> AgentsMdRegistry:
+        """Migrate from old project-level registry format."""
+        try:
+            with open(old_path, encoding="utf-8") as f:
+                old_data = json.load(f)
+
+            # Create new registry with multi-project support
+            registry = AgentsMdRegistry()
+
+            # Extract project_root and files from old format
+            project_root = Path(old_data.get("project_root", self.project_root))
+            files_data = old_data.get("files", [])
+            default_agents = old_data.get("default_agents", [])
+
+            # Create project registry
+            project_registry = registry.get_project_registry(project_root)
+
+            # Convert file entries
+            for file_data in files_data:
+                entry = AgentsMdEntry(
+                    path=Path(file_data["path"]),
+                    enabled=file_data.get("enabled", True),
+                    type=file_data.get("type", "subdirectory"),
+                    agents=file_data.get("agents", []),
+                    inherits_from=Path(file_data["inherits_from"]) if file_data.get("inherits_from") else None,
+                    last_modified=datetime.fromisoformat(file_data["last_modified"]),
+                    checksum=file_data.get("checksum", ""),
+                )
+                project_registry.add_entry(entry)
+
+            # Set default agents
+            registry.default_agents = default_agents
+
+            console.print(f"[green]Migrated registry from {old_path} to {self.registry_path}[/green]")
+            return registry
+
+        except Exception as e:
+            console.print(f"[yellow]Warning: Could not migrate old registry: {e}[/yellow]")
+            return AgentsMdRegistry()
 
     def _save_registry(self) -> None:
         """Save the registry to disk."""
@@ -80,7 +135,7 @@ class AgentsMdManager:
 
         # Add new files to registry
         for path in discovered:
-            if not self.registry.get_entry(path):
+            if not self.project_registry.get_entry(path):
                 entry = AgentsMdEntry(
                     path=path,
                     enabled=True,
@@ -99,20 +154,20 @@ class AgentsMdManager:
                             break
                         parent_path = parent_path.parent
 
-                self.registry.add_entry(entry)
+                self.project_registry.add_entry(entry)
 
         # Remove deleted files from registry
-        registry_paths = {entry.path for entry in self.registry.files}
+        registry_paths = {entry.path for entry in self.project_registry.files}
         for path in registry_paths:
             if path not in discovered:
-                self.registry.remove_entry(path)
+                self.project_registry.remove_entry(path)
 
         self._save_registry()
 
     def list_files(self) -> List[AgentsMdEntry]:
         """List all AGENTS.md files with their status."""
         self.sync_registry()
-        return self.registry.files
+        return self.project_registry.files
 
     def create(self, path: Path, template: str = "root", *, force: bool = False) -> None:
         """Create a new AGENTS.md file."""
@@ -140,7 +195,7 @@ class AgentsMdManager:
             checksum=self._calculate_checksum(path),
         )
 
-        self.registry.add_entry(entry)
+        self.project_registry.add_entry(entry)
         self._save_registry()
 
     def update_agents_section(self, path: Path) -> None:
@@ -231,7 +286,7 @@ class AgentsMdManager:
         path.write_text(content, encoding="utf-8")
 
         # Update registry
-        entry = self.registry.get_entry(path)
+        entry = self.project_registry.get_entry(path)
         if entry:
             entry.last_modified = datetime.now(timezone.utc)
             entry.checksum = self._calculate_checksum(path)
@@ -246,13 +301,13 @@ class AgentsMdManager:
 
         if not force:
             # Check if file has local modifications
-            entry = self.registry.get_entry(path)
+            entry = self.project_registry.get_entry(path)
             if entry and entry.checksum != self._calculate_checksum(path):
                 msg = "File has local modifications. Use --force to delete anyway."
                 raise ValueError(msg)
 
         path.unlink()
-        self.registry.remove_entry(path)
+        self.project_registry.remove_entry(path)
         self._save_registry()
 
     def enable(self, path: Path) -> None:
@@ -260,10 +315,10 @@ class AgentsMdManager:
         # Convert to absolute path for comparison
         abs_path = path if path.is_absolute() else self.project_root / path
 
-        entry = self.registry.get_entry(abs_path)
+        entry = self.project_registry.get_entry(abs_path)
         if not entry:
             # Try to find by relative path
-            for e in self.registry.files:
+            for e in self.project_registry.files:
                 if e.path in (abs_path, self.project_root / path):
                     entry = e
                     break
@@ -280,10 +335,10 @@ class AgentsMdManager:
         # Convert to absolute path for comparison
         abs_path = path if path.is_absolute() else self.project_root / path
 
-        entry = self.registry.get_entry(abs_path)
+        entry = self.project_registry.get_entry(abs_path)
         if not entry:
             # Try to find by relative path
-            for e in self.registry.files:
+            for e in self.project_registry.files:
                 if e.path in (abs_path, self.project_root / path):
                     entry = e
                     break
@@ -300,10 +355,10 @@ class AgentsMdManager:
         self.sync_registry()
 
         return {
-            "total_files": len(self.registry.files),
-            "enabled_files": len([e for e in self.registry.files if e.enabled]),
-            "root_file": self.registry.get_root_entry() is not None,
-            "files": self.registry.files,
+            "total_files": len(self.project_registry.files),
+            "enabled_files": len([e for e in self.project_registry.files if e.enabled]),
+            "root_file": self.project_registry.get_root_entry() is not None,
+            "files": self.project_registry.files,
         }
 
     def display_list(self) -> None:

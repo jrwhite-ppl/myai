@@ -46,6 +46,7 @@ class AgentMetadata(BaseModel):
     max_tokens: Optional[int] = Field(None, ge=1, le=100000)
     requires: List[str] = Field(default_factory=list)
     author: Optional[str] = None
+    color: Optional[str] = None
     created: datetime = Field(default_factory=datetime.now)
     modified: datetime = Field(default_factory=datetime.now)
 
@@ -139,6 +140,7 @@ class AgentSpecification(BaseModel):
             "max_tokens": self.metadata.max_tokens,
             "requires": self.metadata.requires,
             "author": self.metadata.author,
+            "color": self.metadata.color,
             "created": self.metadata.created.isoformat(),
             "modified": self.metadata.modified.isoformat(),
         }
@@ -257,7 +259,7 @@ class AgentSpecification(BaseModel):
         }
 
         # Add optional fields if present
-        for field in ["version", "tags", "tools", "model", "temperature", "max_tokens", "requires", "author"]:
+        for field in ["version", "tags", "tools", "model", "temperature", "max_tokens", "requires", "author", "color"]:
             if field in frontmatter_dict:
                 metadata_dict[field] = frontmatter_dict[field]
 

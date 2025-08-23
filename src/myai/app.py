@@ -5,6 +5,7 @@ This module provides the main CLI interface for MyAI, including command groups,
 output formatting, and global options.
 """
 
+import sys
 from pathlib import Path
 
 import typer
@@ -16,6 +17,7 @@ from rich.text import Text
 from myai.__about__ import __version__
 
 # from myai.cli.formatters import get_formatter  # Currently unused
+from myai.cli.first_run import get_first_run_manager
 from myai.cli.state import AppState
 from myai.commands import agent_cli, config_cli, install_cli, system_cli, uninstall_cli, wizard_cli
 
@@ -50,7 +52,7 @@ Perfect for developers, teams, and organizations using AI-assisted development."
 app = typer.Typer(
     name="myai",
     help=help_text,
-    no_args_is_help=True,
+    no_args_is_help=False,  # We'll handle this ourselves
     add_completion=True,
     rich_markup_mode="rich",
     context_settings={"help_option_names": ["-h", "--help", "help"]},
@@ -63,7 +65,7 @@ console = Console()
 state = AppState()
 
 
-@app.callback()
+@app.callback(invoke_without_command=True)
 def main_callback(
     ctx: typer.Context,
     debug: bool = typer.Option(False, "--debug", "-d", help="Enable debug mode with detailed output"),  # noqa: FBT001
@@ -81,6 +83,36 @@ def main_callback(
 
     # Store state in context
     ctx.obj = state
+
+    # Check for first run and show welcome if needed (for ANY command)
+    first_run_manager = get_first_run_manager()
+    if first_run_manager.should_show_welcome():
+        result = first_run_manager.run_welcome_setup()
+
+        # Handle the result of welcome setup
+        if result == "install_all":
+            # User chose to run setup - run install all command
+            try:
+                from myai.commands.install_cli import install_all
+
+                console.print("[dim]Running MyAI complete setup...[/dim]\n")
+                install_all()
+                console.print("\n[green]✅ Setup completed successfully![/green]")
+            except ImportError as e:
+                console.print(f"[red]❌ Setup failed - could not import install command: {e}[/red]")
+                console.print("[yellow]You can run '[bold]myai install all[/bold]' manually later.[/yellow]")
+            except Exception as e:
+                console.print(f"[red]❌ Setup failed with error: {e}[/red]")
+                console.print("[yellow]You can run '[bold]myai install all[/bold]' manually later.[/yellow]")
+            raise typer.Exit(0)  # Exit after setup
+        else:
+            # Welcome completed without setup - exit
+            raise typer.Exit(0)
+
+    # If no subcommand was provided, show help
+    if ctx.invoked_subcommand is None:
+        console.print(ctx.get_help())
+        raise typer.Exit(2)  # Exit with code 2 to match original behavior
 
 
 @app.command()
@@ -127,13 +159,17 @@ def status(ctx: typer.Context):
       myai system integration-health # Check integrations
     """
     import platform
-    import sys
 
     from myai.agent.registry import get_agent_registry
     from myai.cli.formatters import get_formatter
     from myai.config.manager import get_config_manager
 
     state: AppState = ctx.obj
+
+    # Show logo for status command (but not if already shown in first-run)
+    first_run_manager = get_first_run_manager()
+    if first_run_manager.has_run_before() and first_run_manager.should_show_logo():
+        first_run_manager.display_logo()
 
     if state.debug:
         console.print("[dim]Running status check...[/dim]")
@@ -142,6 +178,12 @@ def status(ctx: typer.Context):
         # Gather system information
         registry = get_agent_registry()
         config_manager = get_config_manager()
+
+        # Ensure ~/.myai directory exists for status to work
+        myai_dir = Path.home() / ".myai"
+        if not myai_dir.exists():
+            myai_dir.mkdir(parents=True, exist_ok=True)
+
         agents = registry.list_agents()
 
         # Count enabled agents across all scopes

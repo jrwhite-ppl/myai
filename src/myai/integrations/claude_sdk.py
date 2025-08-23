@@ -307,6 +307,67 @@ Make it more specific, add clear guidelines, and ensure it follows best practice
                 "error": str(e),
             }
 
+    def export_to_claude_format(self, agent: AgentSpecification) -> str:
+        """Export agent to Claude Code compatible format with color support."""
+        frontmatter = agent.get_frontmatter()
+
+        # Build frontmatter section with proper YAML formatting
+        fm_lines = ["---"]
+        for key, value in frontmatter.items():
+            if value is not None:
+                if isinstance(value, list):
+                    if value:  # Only include non-empty lists
+                        fm_lines.append(f"{key}: {value}")
+                elif isinstance(value, str) and key == "color":
+                    # Ensure color is properly quoted
+                    fm_lines.append(f'color: "{value}"')
+                else:
+                    fm_lines.append(f"{key}: {value}")
+        fm_lines.append("---")
+
+        # Combine frontmatter and content
+        return "\n".join(fm_lines) + "\n\n" + agent.content
+
+    def validate_agent_for_sdk(self, agent: AgentSpecification) -> List[str]:
+        """Validate agent for Claude Code SDK compatibility."""
+        issues = []
+
+        # Check required fields
+        if not agent.metadata.name:
+            issues.append("Agent name is required")
+        if not agent.metadata.display_name:
+            issues.append("Agent display name is required")
+        if not agent.content.strip():
+            issues.append("Agent content cannot be empty")
+
+        # Check color format if provided
+        if agent.metadata.color:
+            color = agent.metadata.color.strip()
+            # Basic validation for hex colors, color names, or rgb values
+            if not (
+                color.startswith("#")
+                and len(color) == 7  # hex  # noqa: PLR2004
+                or color.lower()
+                in [
+                    "red",
+                    "green",
+                    "blue",
+                    "yellow",
+                    "orange",
+                    "purple",
+                    "pink",
+                    "cyan",
+                    "gray",
+                    "black",
+                    "white",
+                ]  # common names
+                or color.startswith("rgb(")
+                or color.startswith("rgba(")  # rgb/rgba
+            ):
+                issues.append(f"Invalid color format: {color}. Use hex (#RRGGBB), color name, or rgb() format")
+
+        return issues
+
 
 def get_claude_sdk_integration() -> ClaudeSDKIntegration:
     """Get Claude SDK integration instance."""

@@ -30,11 +30,10 @@ class AgentsMdEntry(BaseModel):
 
 
 class AgentsMdRegistry(BaseModel):
-    """Registry of all AGENTS.md files in a project."""
+    """Registry of all AGENTS.md files across multiple projects."""
 
     version: str = "1.0.0"
-    project_root: Path
-    files: List[AgentsMdEntry] = Field(default_factory=list)
+    projects: Dict[str, "ProjectRegistry"] = Field(default_factory=dict)
     default_agents: List[str] = Field(
         default_factory=lambda: [
             "lead-developer",
@@ -44,6 +43,20 @@ class AgentsMdRegistry(BaseModel):
             "technical-writer",
         ]
     )
+
+    def get_project_registry(self, project_root: Path) -> "ProjectRegistry":
+        """Get or create a project registry."""
+        project_key = str(project_root)
+        if project_key not in self.projects:
+            self.projects[project_key] = ProjectRegistry(project_root=project_root)
+        return self.projects[project_key]
+
+
+class ProjectRegistry(BaseModel):
+    """Registry for a single project's AGENTS.md files."""
+
+    project_root: Path
+    files: List[AgentsMdEntry] = Field(default_factory=list)
 
     class Config:
         """Pydantic configuration."""

@@ -524,6 +524,28 @@ class CursorAdapter(AbstractAdapter):
                 # Log error but continue
                 print(f"Failed to import agent from {rules_file}: {e}")
 
+        # Also look recursively in .cursor/rules/ for .mdc files
+        cursor_rules_dir = rules_dir / "rules"
+        if cursor_rules_dir.exists():
+            for mdc_file in cursor_rules_dir.rglob("*.mdc"):
+                try:
+                    with open(mdc_file, encoding="utf-8") as f:
+                        content = f.read()
+
+                    # Create agent-like object
+                    agent = {
+                        "name": mdc_file.stem,
+                        "content": content,
+                        "source": "cursor",
+                        "file_path": str(mdc_file),
+                        "category": self._extract_category_from_rules(content),
+                    }
+                    agents.append(agent)
+
+                except Exception as e:
+                    # Log error but continue
+                    print(f"Failed to import agent from {mdc_file}: {e}")
+
         return agents
 
     def _extract_category_from_rules(self, content: str) -> Optional[str]:

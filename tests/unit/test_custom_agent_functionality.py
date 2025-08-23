@@ -14,8 +14,24 @@ from myai.integrations.manager import IntegrationManager
 from myai.models.agent import AgentCategory, AgentMetadata, AgentSpecification
 
 
-def test_custom_agent_registration():
+@pytest.fixture
+def isolated_registry():
+    """Provide an isolated registry for tests that need to modify global state."""
+    original_instance = getattr(AgentRegistry, "_instance", None)
+    AgentRegistry._instance = None
+    try:
+        yield
+    finally:
+        if original_instance is not None:
+            AgentRegistry._instance = original_instance
+        else:
+            AgentRegistry._instance = None
+
+
+def test_custom_agent_registration(isolated_registry):
     """Test registering custom agents in the registry."""
+    # Use isolated registry fixture to ensure clean test state
+    assert isolated_registry is None  # Fixture yields None but provides isolation
     registry = AgentRegistry(auto_discover=False)
 
     # Create a custom agent
@@ -57,8 +73,10 @@ def test_custom_agent_registration():
     assert claude_agents[0].metadata.name == "custom-test-agent"
 
 
-def test_custom_agent_preservation_on_refresh():
+def test_custom_agent_preservation_on_refresh(isolated_registry):
     """Test that custom agents are preserved during registry refresh."""
+    # Use isolated registry fixture to ensure clean test state
+    assert isolated_registry is None  # Fixture yields None but provides isolation
     registry = AgentRegistry(auto_discover=False)
 
     # Register a regular agent
@@ -102,12 +120,10 @@ def test_custom_agent_preservation_on_refresh():
     assert custom_retrieved.source == "user"
 
 
-def test_integration_manager_import_agents():
+def test_integration_manager_import_agents(isolated_registry):
     """Test the import_agents functionality directly."""
-    # Clear the registry to ensure test isolation
-    from myai.agent.registry import AgentRegistry
-
-    AgentRegistry._instance = None
+    # Fixture provides isolated registry context
+    assert isolated_registry is None  # Fixture yields None but provides isolation
 
     # Create mock raw agent data with frontmatter to ensure consistent parsing
     raw_agents = [
@@ -176,8 +192,10 @@ This agent was imported from an external source.
     asyncio.run(test_import())
 
 
-def test_custom_agent_not_persisted():
+def test_custom_agent_not_persisted(isolated_registry):
     """Test that custom agents with external paths are not persisted."""
+    # Use isolated registry fixture to ensure clean test state
+    assert isolated_registry is None  # Fixture yields None but provides isolation
     registry = AgentRegistry(auto_discover=False)
 
     # Mock the agent storage save method

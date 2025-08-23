@@ -888,11 +888,15 @@ def edit(
         console.print(f"[dim]Tools: {', '.join(agent.metadata.tools)}[/dim]")
         if agent.metadata.tags:
             console.print(f"[dim]Tags: {', '.join(agent.metadata.tags)}[/dim]")
+        if agent.file_path:
+            console.print(f"[dim]File: {agent.file_path}[/dim]")
         console.print()
 
-        # Create a temporary markdown file for editing
+        # Create a temporary markdown file for editing with full YAML frontmatter
         with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as tmp:
-            tmp.write(agent.content)
+            # Reconstruct the full agent file with YAML frontmatter
+            full_content = _reconstruct_agent_file(agent)
+            tmp.write(full_content)
             tmp_path = tmp.name
 
         try:
@@ -986,11 +990,19 @@ def edit(
 
             # Read the edited content
             with open(tmp_path) as f:
-                new_content = f.read()
+                new_full_content = f.read()
 
-            if new_content != agent.content:
-                # Update the agent
-                agent.content = new_content
+            # Parse the edited content to separate frontmatter and content
+            parsed_agent = _parse_agent_file(new_full_content)
+
+            # Check for changes (normalize whitespace for content comparison)
+            content_changed = parsed_agent["content"].strip() != agent.content.strip()
+            metadata_changed = _metadata_changed(agent, parsed_agent["metadata"])
+
+            if content_changed or metadata_changed:
+                # Update the agent with new content and metadata
+                agent.content = parsed_agent["content"]
+                _update_agent_metadata(agent, parsed_agent["metadata"])
 
                 # Save to storage
                 from myai.storage.agent import AgentStorage
@@ -1024,6 +1036,143 @@ def edit(
         console.print(f"[red]Error editing agent: {e}[/red]")
         if state.is_debug():
             raise
+
+
+def _reconstruct_agent_file(agent) -> str:
+    """Reconstruct the full agent file with YAML frontmatter and content."""
+    from datetime import datetime, timezone
+
+    import yaml
+
+    # Create the metadata dictionary for YAML frontmatter
+    metadata = {
+        "name": agent.metadata.name,
+        "display_name": agent.metadata.display_name,
+        "description": agent.metadata.description,
+        "version": agent.metadata.version,
+        "category": agent.metadata.category.value,
+        "created": (
+            agent.metadata.created.isoformat() if agent.metadata.created else datetime.now(timezone.utc).isoformat()
+        ),
+        "modified": datetime.now(timezone.utc).isoformat(),
+    }
+
+    # Add optional fields if they exist and are not empty
+    if agent.metadata.tags:
+        metadata["tags"] = agent.metadata.tags
+    if agent.metadata.tools:
+        metadata["tools"] = agent.metadata.tools
+    if agent.metadata.author:
+        metadata["author"] = agent.metadata.author
+
+    # Generate YAML frontmatter
+    yaml_frontmatter = yaml.dump(metadata, default_flow_style=False, allow_unicode=True)
+
+    # Combine frontmatter and content
+    full_content = f"---\n{yaml_frontmatter}---\n\n{agent.content}"
+
+    return full_content
+
+
+def _parse_agent_file(content: str) -> dict:
+    """Parse agent file content to extract YAML frontmatter and content."""
+    import yaml
+
+    # Check if content starts with YAML frontmatter
+    if not content.startswith("---\n"):
+        # No frontmatter, return content as-is with empty metadata
+        return {"metadata": {}, "content": content}
+
+    try:
+        # Find the end of the frontmatter - look for second --- on its own line
+        lines = content.split("\n")
+        frontmatter_end = -1
+
+        for i, line in enumerate(lines[1:], 1):  # Skip first line (---)
+            if line.strip() == "---":
+                frontmatter_end = i
+                break
+
+        if frontmatter_end == -1:
+            # No closing ---, malformed frontmatter
+            return {"metadata": {}, "content": content}
+
+        # Extract frontmatter and content
+        frontmatter_lines = lines[1:frontmatter_end]
+        content_lines = lines[frontmatter_end + 1 :]
+
+        frontmatter_content = "\n".join(frontmatter_lines)
+        main_content = "\n".join(content_lines)
+
+        # Remove leading empty lines from content
+        main_content = main_content.lstrip("\n")
+
+        metadata = yaml.safe_load(frontmatter_content) or {}
+
+        return {"metadata": metadata, "content": main_content}
+
+    except Exception as e:
+        # If parsing fails, return content as-is
+        print(f"Warning: Failed to parse YAML frontmatter: {e}")
+        return {"metadata": {}, "content": content}
+
+
+def _metadata_changed(agent, new_metadata: dict) -> bool:
+    """Check if metadata has changed."""
+    current_metadata = {
+        "name": agent.metadata.name,
+        "display_name": agent.metadata.display_name,
+        "description": agent.metadata.description,
+        "version": agent.metadata.version,
+        "category": agent.metadata.category.value,
+    }
+
+    # Check core fields
+    for key in current_metadata:
+        if key in new_metadata and str(new_metadata[key]) != str(current_metadata[key]):
+            return True
+
+    # Check optional fields
+    if new_metadata.get("tags") != agent.metadata.tags:
+        return True
+    if new_metadata.get("tools") != agent.metadata.tools:
+        return True
+    if new_metadata.get("author") != agent.metadata.author:
+        return True
+
+    return False
+
+
+def _update_agent_metadata(agent, new_metadata: dict):
+    """Update agent metadata from parsed frontmatter."""
+    from datetime import datetime, timezone
+
+    from myai.models.agent import AgentCategory
+
+    # Update core fields if present
+    if "display_name" in new_metadata:
+        agent.metadata.display_name = str(new_metadata["display_name"])
+    if "description" in new_metadata:
+        agent.metadata.description = str(new_metadata["description"])
+    if "version" in new_metadata:
+        agent.metadata.version = str(new_metadata["version"])
+    if "category" in new_metadata:
+        try:
+            agent.metadata.category = AgentCategory(new_metadata["category"])
+        except ValueError:
+            # Invalid category, keep existing
+            pass
+
+    # Update optional fields
+    if "tags" in new_metadata:
+        agent.metadata.tags = list(new_metadata["tags"]) if new_metadata["tags"] else []
+    if "tools" in new_metadata:
+        agent.metadata.tools = list(new_metadata["tools"]) if new_metadata["tools"] else []
+    if "author" in new_metadata:
+        agent.metadata.author = str(new_metadata["author"]) if new_metadata["author"] else None
+
+    # Update modified timestamp
+    agent.metadata.modified = datetime.now(timezone.utc)
 
 
 @app.command()
