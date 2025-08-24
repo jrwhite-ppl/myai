@@ -109,7 +109,10 @@ class TestAgentCLIGlobalVsProject(unittest.TestCase):
         self.assertTrue(global_claude_dir.exists())
         global_claude_file = global_claude_dir / "agentos-project-manager.md"
         self.assertTrue(global_claude_file.exists())
-        self.assertEqual(global_claude_file.read_text(), "# Global Agent Content")
+        # Content should be a minimal wrapper, not raw content
+        content = global_claude_file.read_text()
+        self.assertIn("agentos-project-manager", content)
+        self.assertIn("~/.myai/agents/", content)
 
         # Verify NO project files were created
         project_claude_dir = self.test_project / ".claude" / "agents"
@@ -460,7 +463,10 @@ class TestAgentCLIFileManagement(unittest.TestCase):
         # Verify only global Claude file was created
         global_claude_file = self.test_home / ".claude" / "agents" / "test-agent.md"
         self.assertTrue(global_claude_file.exists(), "Global Claude file should be created")
-        self.assertEqual(global_claude_file.read_text(), "# Test Agent Content")
+        # Content should be a minimal wrapper, not raw content
+        content = global_claude_file.read_text()
+        self.assertIn("test-agent", content)
+        self.assertIn("~/.myai/agents/", content)
 
         # Verify no project files were created
         project_claude_dir = self.test_project / ".claude" / "agents"
@@ -490,13 +496,15 @@ class TestAgentCLIFileManagement(unittest.TestCase):
         self.assertTrue(project_claude_file.exists(), "Project Claude file should be created")
         self.assertTrue(project_cursor_file.exists(), "Project Cursor file should be created")
 
-        # Verify project Claude file contains actual agent content
+        # Verify project Claude file contains minimal wrapper
         claude_content = project_claude_file.read_text()
-        self.assertEqual(claude_content, "# Test Agent Content")
+        self.assertIn("test-agent", claude_content)
+        self.assertIn("~/.myai/agents/", claude_content)
 
-        # Verify project Cursor file contains actual agent content
+        # Verify project Cursor file contains minimal wrapper
         cursor_content = project_cursor_file.read_text()
-        self.assertEqual(cursor_content, "# Test Agent Content")
+        self.assertIn("test-agent", cursor_content)
+        self.assertIn("~/.myai/agents/", cursor_content)
 
         # Verify no global files were created
         global_claude_dir = self.test_home / ".claude" / "agents"

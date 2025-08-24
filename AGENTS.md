@@ -5,14 +5,9 @@ This project is enhanced with MyAI agents for comprehensive development support.
 ## Available AI Agents
 
 <!-- MYAI:AGENTS:START -->
-### Agent-OS Project Manager (@myai/agents/engineering/agentos-project-manager)
-No description provided
-
-### Agent-OS Spec Creator (@myai/agents/engineering/agentos-spec-creator)
-No description provided
-
-### Agent-OS Workflow Executor (@myai/agents/engineering/agentos-workflow-executor)
-No description provided
+### Executive Leader (@myai/agents/leadership/executive-leader)
+Executive Leader & Strategic Operations Director
+Full agent: ~/.myai/agents/leadership/executive-leader.md
 <!-- MYAI:AGENTS:END -->
 
 ## Project Guidelines

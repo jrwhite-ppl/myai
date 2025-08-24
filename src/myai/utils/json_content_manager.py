@@ -138,12 +138,26 @@ def update_claude_settings(file_path: Path, project_config: Dict[str, Any], *, c
         project_config: Project configuration to write
         create_if_missing: Whether to create file if missing
     """
+    # For Claude settings.local.json, we need to merge at the root level
+    # The project_config might come with a "projects" wrapper, but we need to extract the actual config
+
+    # Extract the actual project config if it's wrapped in "projects"
+    if "projects" in project_config and len(project_config) == 1:
+        # Get the first (and only) project config
+        projects = project_config["projects"]
+        if isinstance(projects, dict) and len(projects) == 1:
+            # Get the actual config for this project
+            actual_config = next(iter(projects.values()))
+        else:
+            actual_config = project_config
+    else:
+        actual_config = project_config
+
     # Define what sections MyAI manages in Claude settings
-    managed_sections = ["projects"]  # MyAI manages the projects section
+    # We only manage permissions - users should set their own model, agentsPath, etc.
+    managed_sections = ["permissions"]
 
     manager = JsonContentManager(managed_sections)
 
     # Update only the managed sections
-    updates = {"projects": project_config.get("projects", {})}
-
-    manager.update_sections(file_path, updates, preserve_unknown=True, create_if_missing=create_if_missing)
+    manager.update_sections(file_path, actual_config, preserve_unknown=True, create_if_missing=create_if_missing)

@@ -12,6 +12,7 @@ import subprocess
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from myai.agent.wrapper import get_wrapper_generator
 from myai.integrations.base import (
     AbstractAdapter,
     AdapterCapability,
@@ -30,6 +31,7 @@ class CursorAdapter(AbstractAdapter):
         self._installation_path: Optional[Path] = None
         self._version: Optional[str] = None
         self._rules_directory: Optional[Path] = None
+        self.wrapper_generator = get_wrapper_generator()
 
     @property
     def info(self) -> AdapterInfo:
@@ -460,12 +462,20 @@ class CursorAdapter(AbstractAdapter):
                     result["warnings"].append("Skipped agent with missing name")
                     continue
 
-                # Create rule file path (using .cursorrules for project rules)
-                rules_file = rules_dir / f"{name}.cursorrules"
+                # Create rule file path (using .mdc for MDC format)
+                rules_file = rules_dir / "rules" / f"{name}.mdc"
 
                 if not dry_run:
-                    # Generate Cursor rules content for project-level integration
-                    cursor_content = self._generate_project_cursor_rules(name, content, category)
+                    # Ensure rules subdirectory exists
+                    rules_file.parent.mkdir(parents=True, exist_ok=True)
+
+                    # Generate Cursor MDC content with minimal wrapper
+                    if hasattr(agent, "metadata"):
+                        # Agent is an AgentSpecification, use wrapper generator
+                        cursor_content = self.wrapper_generator.generate_minimal_cursor_wrapper(agent)
+                    else:
+                        # Fallback for dict-like objects
+                        cursor_content = self._generate_project_cursor_rules(name, content, category)
 
                     # Write rule file
                     with open(rules_file, "w", encoding="utf-8") as f:
@@ -504,47 +514,27 @@ class CursorAdapter(AbstractAdapter):
         if not rules_dir.exists():
             return agents
 
-        # Find all rule files (.cursorrules for project rules)
-        for rules_file in rules_dir.glob("*.cursorrules"):
-            try:
-                with open(rules_file, encoding="utf-8") as f:
-                    content = f.read()
-
-                # Create agent-like object
-                agent = {
-                    "name": rules_file.stem,
-                    "content": content,
-                    "source": "cursor",
-                    "file_path": str(rules_file),
-                    "category": self._extract_category_from_rules(content),
-                }
-                agents.append(agent)
-
-            except Exception as e:
-                # Log error but continue
-                print(f"Failed to import agent from {rules_file}: {e}")
-
-        # Also look recursively in .cursor/rules/ for .mdc files
-        cursor_rules_dir = rules_dir / "rules"
-        if cursor_rules_dir.exists():
-            for mdc_file in cursor_rules_dir.rglob("*.mdc"):
+        # Find all rule files (.mdc files in rules subdirectory)
+        rules_subdir = rules_dir / "rules"
+        if rules_subdir.exists():
+            for rules_file in rules_subdir.glob("*.mdc"):
                 try:
-                    with open(mdc_file, encoding="utf-8") as f:
+                    with open(rules_file, encoding="utf-8") as f:
                         content = f.read()
 
                     # Create agent-like object
                     agent = {
-                        "name": mdc_file.stem,
+                        "name": rules_file.stem,
                         "content": content,
                         "source": "cursor",
-                        "file_path": str(mdc_file),
+                        "file_path": str(rules_file),
                         "category": self._extract_category_from_rules(content),
                     }
                     agents.append(agent)
 
                 except Exception as e:
                     # Log error but continue
-                    print(f"Failed to import agent from {mdc_file}: {e}")
+                    print(f"Failed to import agent from {rules_file}: {e}")
 
         return agents
 

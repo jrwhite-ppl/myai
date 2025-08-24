@@ -24,6 +24,7 @@ from myai.agent.manager import AgentManager
 from myai.agent.registry import get_agent_registry
 from myai.agent.templates import get_template_registry
 from myai.agent.validator import AgentValidator
+from myai.agent.wrapper import get_wrapper_generator
 from myai.cli.formatters import get_formatter
 from myai.cli.state import AppState
 from myai.config.manager import get_config_manager
@@ -96,30 +97,35 @@ def _create_agent_files(agent, *, global_scope=False):
         global_scope: If True, create global files. If False, create project-level files.
     """
     agent_name = agent.metadata.name
+    wrapper_generator = get_wrapper_generator()
 
     if global_scope:
-        # Create global Claude file
+        # Create global Claude file with minimal wrapper
         claude_dir = Path.home() / ".claude" / "agents"
         claude_dir.mkdir(parents=True, exist_ok=True)
         claude_file = claude_dir / f"{agent_name}.md"
         if not claude_file.exists():
-            claude_file.write_text(agent.content)
+            # Generate minimal Claude wrapper
+            claude_content = wrapper_generator.generate_minimal_claude_wrapper(agent)
+            claude_file.write_text(claude_content)
     else:
-        # Create project Claude file with actual content
+        # Create project Claude file with minimal wrapper
         project_claude_dir = Path.cwd() / ".claude" / "agents"
         project_claude_dir.mkdir(parents=True, exist_ok=True)
         project_claude_file = project_claude_dir / f"{agent_name}.md"
         if not project_claude_file.exists():
-            # Write the actual agent content for Claude
-            project_claude_file.write_text(agent.content)
+            # Generate minimal Claude wrapper
+            claude_content = wrapper_generator.generate_minimal_claude_wrapper(agent)
+            project_claude_file.write_text(claude_content)
 
-        # Create project Cursor file with actual content
+        # Create project Cursor file with minimal MDC wrapper
         project_cursor_dir = Path.cwd() / ".cursor" / "rules"
         project_cursor_dir.mkdir(parents=True, exist_ok=True)
         cursor_file = project_cursor_dir / f"{agent_name}.mdc"
         if not cursor_file.exists():
-            # Write the actual agent content for Cursor
-            cursor_file.write_text(agent.content)
+            # Generate minimal Cursor wrapper
+            cursor_content = wrapper_generator.generate_minimal_cursor_wrapper(agent)
+            cursor_file.write_text(cursor_content)
 
 
 def _remove_agent_files(agent_name, *, global_scope=False):
@@ -1354,6 +1360,159 @@ def test(
 
     except Exception as e:
         console.print(f"[red]Error testing agent: {e}[/red]")
+        if state.is_debug():
+            raise
+
+
+@app.command(name="test-activation")
+def test_activation(
+    ctx: typer.Context,
+    phrase: str = typer.Argument(..., help="Phrase to test for agent activation"),
+    show_all: bool = typer.Option(False, "--all", "-a", help="Show all agents, not just matches"),
+    threshold: int = typer.Option(50, "--threshold", "-t", help="Minimum match score (0-100)"),
+):
+    """Test which agents would activate for a given phrase.
+
+    This command analyzes your input phrase and shows which agents would likely
+    respond based on their activation patterns, keywords, and descriptions.
+
+    Examples:
+      myai agent test-activation "help me review this Python code"
+      myai agent test-activation "I need security analysis" --all
+      myai agent test-activation "deploy to kubernetes" --threshold 70
+
+    The command shows:
+    - Agents that would likely activate (with match scores)
+    - Why each agent matched (keywords, patterns)
+    - Example phrases for better activation
+
+    Related commands:
+      myai agent list            # List all available agents
+      myai agent show <name>     # Show agent details
+    """
+    state: AppState = ctx.obj
+
+    try:
+        registry = get_agent_registry()
+        wrapper_generator = get_wrapper_generator()
+
+        # Get all agents
+        all_agents = registry.list_agents()
+
+        # Score each agent based on the phrase
+        scored_agents = []
+        phrase_lower = phrase.lower()
+
+        for agent in all_agents:
+            score = 0
+            matched_keywords = []
+            matched_patterns = []
+
+            # Check agent name
+            if agent.metadata.name.replace("-", " ") in phrase_lower:
+                score += 40
+                matched_patterns.append(f"name: {agent.metadata.name}")
+
+            # Check display name
+            if agent.metadata.display_name.lower() in phrase_lower:
+                score += 40
+                matched_patterns.append(f"display name: {agent.metadata.display_name}")
+
+            # Extract and check activation phrases
+            activation_phrases = wrapper_generator._extract_activation_phrases(agent)
+            for activation_phrase in activation_phrases:
+                if activation_phrase.lower() in phrase_lower or phrase_lower in activation_phrase.lower():
+                    score += 30
+                    matched_patterns.append(f'activation: "{activation_phrase}"')
+                    break
+
+            # Check skill keywords
+            skill_keywords = wrapper_generator._extract_skill_keywords(agent)
+            for keyword in skill_keywords.split(", "):
+                if keyword.lower() in phrase_lower:
+                    score += 20
+                    matched_keywords.append(keyword)
+
+            # Check description
+            if agent.metadata.description:
+                desc_words = agent.metadata.description.lower().split()
+                phrase_words = phrase_lower.split()
+                for word in phrase_words:
+                    if len(word) > 3 and word in desc_words:  # Skip short words
+                        score += 10
+                        matched_keywords.append(word)
+
+            # Check tags
+            for tag in agent.metadata.tags:
+                if tag.lower() in phrase_lower:
+                    score += 15
+                    matched_keywords.append(f"tag:{tag}")
+
+            # Cap score at 100
+            score = min(score, 100)
+
+            if score >= threshold or show_all:
+                scored_agents.append(
+                    {
+                        "agent": agent,
+                        "score": score,
+                        "matched_keywords": list(set(matched_keywords)),
+                        "matched_patterns": matched_patterns,
+                    }
+                )
+
+        # Sort by score (highest first)
+        scored_agents.sort(key=lambda x: x["score"], reverse=True)
+
+        if not scored_agents:
+            console.print(f'[yellow]No agents would activate for: "{phrase}"[/yellow]')
+            console.print("\n[dim]Try using more specific keywords or agent names.[/dim]")
+            return
+
+        # Display results
+        console.print(f'\n[bold]Agents that would activate for: "{phrase}"[/bold]\n')
+
+        for item in scored_agents:
+            agent = item["agent"]
+            score = item["score"]
+
+            if score >= threshold:
+                # High confidence matches
+                color = "green" if score >= 70 else "yellow" if score >= 50 else "dim"
+                console.print(
+                    f"[{color}]● {agent.metadata.display_name} ({agent.metadata.name}) - {score}% match[/{color}]"
+                )
+            else:
+                # Low confidence (only shown with --all)
+                console.print(f"[dim]○ {agent.metadata.display_name} ({agent.metadata.name}) - {score}% match[/dim]")
+
+            # Show why it matched
+            if item["matched_patterns"]:
+                console.print(f"   [blue]Matched:[/blue] {', '.join(item['matched_patterns'])}")
+            if item["matched_keywords"]:
+                console.print(f"   [cyan]Keywords:[/cyan] {', '.join(item['matched_keywords'])}")
+
+            # Show activation examples
+            if score >= threshold:
+                examples = wrapper_generator._generate_activation_examples(agent).split("\n")[:2]
+                console.print(f"   [dim]Try:[/dim] {', '.join(e.strip('- ') for e in examples if e.strip())}")
+
+            console.print()
+
+        # Summary
+        high_matches = len([a for a in scored_agents if a["score"] >= threshold])
+        if high_matches > 0:
+            console.print(f"[green]✓ {high_matches} agent(s) would likely activate[/green]")
+        else:
+            console.print("[yellow]No high-confidence matches. Try more specific phrases.[/yellow]")
+
+        if not show_all and len(scored_agents) > high_matches:
+            console.print(
+                f"\n[dim]Use --all to see {len(scored_agents) - high_matches} additional lower-scoring agents[/dim]"
+            )
+
+    except Exception as e:
+        console.print(f"[red]Error testing activation: {e}[/red]")
         if state.is_debug():
             raise
 

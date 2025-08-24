@@ -554,13 +554,10 @@ source: "~/.myai/agents"
     claude_project_config = {
         "projects": {
             str(cwd): {
-                "model": "claude-3-sonnet-20241022",
                 "permissions": {
                     "allow": ["Bash(uv run:*)", "Bash(npm run:*)", "Bash(yarn:*)", "Bash(make:*)", "Bash(git:*)"],
                     "deny": ["Read(./.env)", "Read(./.env.*)", "Read(./secrets/**)"],
-                },
-                "env": {"MYAI_PROJECT": "true"},
-                "agentsPath": str(project_claude_agents),
+                }
             }
         }
     }
@@ -732,12 +729,10 @@ def project(
     claude_project_config = {
         "projects": {
             str(cwd): {
-                "model": "claude-3-sonnet-20241022",
                 "permissions": {
                     "allow": ["Bash(uv run:*)", "Bash(npm run:*)", "Bash(yarn:*)", "Bash(make:*)", "Bash(git:*)"],
                     "deny": ["Read(./.env)", "Read(./.env.*)", "Read(./secrets/**)"],
-                },
-                "agentsPath": str(claude_agents_dir),
+                }
             }
         }
     }

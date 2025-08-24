@@ -22,6 +22,7 @@ except ImportError:
     anthropic = None
     Anthropic = None
 
+from myai.agent.wrapper import get_wrapper_generator
 from myai.models.agent import AgentSpecification
 
 
@@ -32,6 +33,7 @@ class ClaudeSDKIntegration:
         """Initialize Claude SDK integration."""
         self.client = None
         self.console = Console()
+        self.wrapper_generator = get_wrapper_generator()
         if HAS_CLAUDE_SDK:
             self._initialize_client()
 
@@ -307,8 +309,22 @@ Make it more specific, add clear guidelines, and ensure it follows best practice
                 "error": str(e),
             }
 
-    def export_to_claude_format(self, agent: AgentSpecification) -> str:
-        """Export agent to Claude Code compatible format with color support."""
+    def export_to_claude_format(self, agent: AgentSpecification, *, minimal: bool = False) -> str:
+        """
+        Export agent to Claude Code compatible format.
+
+        Args:
+            agent: Agent specification to export
+            minimal: If True, generate minimal wrapper; if False, export full content
+
+        Returns:
+            Claude-compatible markdown content
+        """
+        if minimal:
+            # Use the wrapper generator for minimal format
+            return self.wrapper_generator.generate_minimal_claude_wrapper(agent)
+
+        # Original full export logic
         frontmatter = agent.get_frontmatter()
 
         # Build frontmatter section with proper YAML formatting
@@ -327,6 +343,10 @@ Make it more specific, add clear guidelines, and ensure it follows best practice
 
         # Combine frontmatter and content
         return "\n".join(fm_lines) + "\n\n" + agent.content
+
+    def generate_claude_wrapper(self, agent: AgentSpecification) -> str:
+        """Generate a minimal Claude wrapper for the agent."""
+        return self.wrapper_generator.generate_minimal_claude_wrapper(agent)
 
     def validate_agent_for_sdk(self, agent: AgentSpecification) -> List[str]:
         """Validate agent for Claude Code SDK compatibility."""

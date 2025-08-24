@@ -380,9 +380,9 @@ class ClaudeAdapter(AbstractAdapter):
                 if hasattr(agent, "metadata") and hasattr(agent.metadata, "name"):
                     name = str(agent.metadata.name)
 
-                    # Use SDK format if available
+                    # Use SDK format with minimal wrappers
                     if use_sdk and sdk:
-                        content = sdk.export_to_claude_format(agent)
+                        content = sdk.export_to_claude_format(agent, minimal=True)
                     elif hasattr(agent, "to_markdown"):
                         content = agent.to_markdown()
                     else:

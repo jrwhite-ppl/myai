@@ -252,7 +252,8 @@ class AgentsMdManager:
             if agent:
                 category = agent.metadata.category.value
                 section = f"""### {agent.metadata.display_name} (@myai/agents/{category}/{agent_name})
-{agent.metadata.description}"""
+{agent.metadata.description}
+Full agent: ~/.myai/agents/{category}/{agent_name}.md"""
                 sections.append(section)
 
         return "\n\n".join(sections)
