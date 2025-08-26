@@ -46,7 +46,7 @@ jobs:
       run: uv run --extra test pytest --cov=./src -vvv -n auto --cov-report=xml --cov-report=term-missing tests/
 
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v4
+      uses: codecov/codecov-action@v5
       with:
         file: ./coverage.xml
         flags: unittests
